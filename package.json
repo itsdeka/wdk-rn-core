@@ -1,0 +1,51 @@
+{
+  "name": "@tetherto/wdk-rn-core",
+  "version": "1.0.0",
+  "description": "Core functionality for React Native wallets - wallet management, balance fetching, and worklet operations",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsdeka/wdk-rn-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/itsdeka/wdk-rn-core/issues"
+  },
+  "homepage": "https://github.com/itsdeka/wdk-rn-core#readme",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "wallet",
+    "react-native",
+    "core",
+    "crypto",
+    "blockchain",
+    "balance"
+  ],
+  "author": "Tetherto",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@tetherto/wdk-rn-secure-storage": "https://github.com/itsdeka/wdk-rn-secure-storage",
+    "zustand": "^5.0.9",
+    "react-native-bare-kit": "^0.11.0",
+    "react-native-mmkv": "^4.1.0",
+    "pear-wrk-wdk": "https://github.com/itsdeka/pear-wrk-wdk"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.70.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/react": "^18.2.0"
+  }
+}
+

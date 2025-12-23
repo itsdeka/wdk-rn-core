@@ -1,0 +1,81 @@
+/**
+ * Wallet Utilities
+ * 
+ * Helper functions for working with wallets and retrieving addresses from walletStore.
+ */
+
+import type { WalletStore as WalletStoreType } from '../store/walletStore'
+import type { WalletStore } from '../types'
+import { WorkletService } from '../services/workletService'
+import { getWorkletStore } from '../store/workletStore'
+import { getWalletStore } from '../store/walletStore'
+
+/**
+ * Get addresses for a wallet from walletStore
+ * 
+ * This helper function retrieves addresses for a specific accountIndex from the walletStore.
+ * Addresses are stored in walletStore as: { [network]: { [accountIndex]: address } }
+ * This converts them to: { [network]: address } for a specific accountIndex
+ * 
+ * NOTE: walletStore is the ONLY place where addresses are actually stored.
+ * This function simply retrieves/looks up addresses from walletStore.
+ * 
+ * @param walletStore - The wallet store instance (Zustand store) - the source of truth for addresses
+ * @param accountIndex - The account index to get addresses for
+ * @returns Record of network -> address for the given accountIndex
+ */
+export function getWalletAddresses(
+  walletStore: { getState: () => WalletStoreType },
+  accountIndex: number
+): Record<string, string> {
+  const state = walletStore.getState()
+  const addresses: Record<string, string> = {}
+  
+  // Retrieve addresses for this accountIndex from walletStore
+  Object.entries(state.addresses).forEach(([network, networkAddresses]) => {
+    const address = networkAddresses?.[accountIndex]
+    if (address) {
+      addresses[network] = address
+    }
+  })
+  
+  return addresses
+}
+
+/**
+ * Create a base wallet store that wraps the worklet and wallet stores
+ * 
+ * This provides the worklet methods (callAccountMethod, isWalletInitialized)
+ * and helper functions for retrieving addresses from walletStore.
+ * Apps should extend this with their own wallet metadata and balance management.
+ * 
+ * Always uses the default MMKV storage adapter.
+ * 
+ * @returns Base wallet store implementation
+ */
+export function createBaseWalletStore(): Pick<WalletStore, 'callAccountMethod' | 'isWalletInitialized'> & {
+  getWalletAddresses: (accountIndex: number) => Record<string, string>
+} {
+  const workletStore = getWorkletStore()
+  const walletStore = getWalletStore()
+  
+  return {
+    callAccountMethod: async <T = unknown>(
+      network: string,
+      accountIndex: number,
+      methodName: string,
+      args?: unknown
+    ): Promise<T> => {
+      return WorkletService.callAccountMethod<T>(network, accountIndex, methodName, args)
+    },
+
+    isWalletInitialized: () => {
+      return workletStore.getState().isInitialized
+    },
+
+    getWalletAddresses: (accountIndex: number) => {
+      return getWalletAddresses(walletStore, accountIndex)
+    },
+  }
+}
+
