@@ -93,6 +93,7 @@ export function WdkAppProvider({
   // Use refs to track initialization attempts without causing re-renders
   const hasAttemptedWorkletInitialization = useRef(false)
   const hasAttemptedWalletInitialization = useRef(false)
+  const hasCompletedInitialBalanceFetch = useRef(false)
 
   // Worklet hooks
   const {
@@ -383,12 +384,7 @@ export function WdkAppProvider({
 
   // Automatic balance fetching after wallet initialization
   useEffect(() => {
-    if (!autoFetchBalances || !walletInitialized || isFetchingBalances) {
-      return
-    }
-
-    // Only fetch balances if wallet is fully ready
-    if (!isReady) {
+    if (!autoFetchBalances || !walletInitialized || !isReady || hasCompletedInitialBalanceFetch.current) {
       return
     }
 
@@ -398,6 +394,7 @@ export function WdkAppProvider({
         setIsFetchingBalances(true)
         await fetchAllBalances()
         console.log('[WdkAppProvider] Automatic balance fetch completed')
+        hasCompletedInitialBalanceFetch.current = true
       } catch (error) {
         console.error('[WdkAppProvider] Failed to fetch balances:', error)
       } finally {
@@ -406,7 +403,7 @@ export function WdkAppProvider({
     }
 
     fetchBalances()
-  }, [autoFetchBalances, walletInitialized, isReady, fetchAllBalances, isFetchingBalances])
+  }, [autoFetchBalances, walletInitialized, isReady])
 
   // Auto-refresh balances at specified interval
   useEffect(() => {

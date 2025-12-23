@@ -122,12 +122,18 @@ export function useBalanceFetcher(options: {
     return getAllWalletsFromWalletStore(walletStore)
   }, [walletStore])
 
-  // Get token helpers from config provider
-  const tokenConfigs =
+  // Get token helpers from config provider (memoized to prevent recreation)
+  const tokenConfigs = useMemo(() =>
     typeof tokenConfigProvider === 'function'
       ? tokenConfigProvider()
-      : tokenConfigProvider
-  const tokenHelpers = createTokenHelpers(tokenConfigs)
+      : tokenConfigProvider,
+    [tokenConfigProvider]
+  )
+
+  const tokenHelpers = useMemo(() =>
+    createTokenHelpers(tokenConfigs),
+    [tokenConfigs]
+  )
 
   /**
    * Fetch native token balance for a specific wallet and network
