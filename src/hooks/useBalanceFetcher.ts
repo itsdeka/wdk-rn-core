@@ -157,7 +157,6 @@ export function useBalanceFetcher(options: {
       WorkletService.setBalanceLoading(network, accountIndex, null, true)
 
       try {
-        console.log(`[BalanceFetcher] Calling getBalance for ${network}:${accountIndex}...`)
         // Call getBalance method on the account for native token
         const balanceResult = await WorkletService.callAccountMethod<unknown>(
           network,
@@ -165,7 +164,6 @@ export function useBalanceFetcher(options: {
           'getBalance',
           null
         )
-        console.log(`[BalanceFetcher] getBalance result for ${network}:${accountIndex}:`, balanceResult)
 
         // Convert to string (handles BigInt values)
         const balance = convertBalanceToString(balanceResult)
@@ -296,19 +294,16 @@ export function useBalanceFetcher(options: {
   const fetchAllBalancesForWallet = useCallback(
     async (accountIndex: number): Promise<BalanceFetchResult[]> => {
       if (!getIsInitialized()) {
-        console.log(`[BalanceFetcher] Wallet not initialized, skipping wallet ${accountIndex}`)
         return []
       }
 
       const networks = tokenHelpers.getSupportedNetworks()
-      console.log(`[BalanceFetcher] Fetching balances for wallet ${accountIndex} across ${networks.length} network(s): ${networks.join(', ')}`)
       const results: BalanceFetchResult[] = []
 
       // Fetch balances for all networks and tokens in parallel
       await Promise.all(
         networks.map(async (network) => {
           const tokens = tokenHelpers.getTokensForNetwork(network)
-          console.log(`[BalanceFetcher] Network ${network}: fetching ${tokens.length} token(s)`)
 
           await Promise.all(
             tokens.map(async (token) => {
@@ -318,11 +313,6 @@ export function useBalanceFetcher(options: {
                   accountIndex,
                   token.address
                 )
-                if (result.success) {
-                  console.log(`[BalanceFetcher] ✓ ${network}:${accountIndex}:${token.symbol} = ${result.balance}`)
-                } else {
-                  console.warn(`[BalanceFetcher] ✗ ${network}:${accountIndex}:${token.symbol}: ${result.error}`)
-                }
                 results.push(result)
               } catch (error) {
                 console.error(`[BalanceFetcher] Error fetching ${network}:${accountIndex}:${token.symbol}:`, error)
@@ -340,7 +330,6 @@ export function useBalanceFetcher(options: {
         })
       )
 
-      console.log(`[BalanceFetcher] Completed fetching balances for wallet ${accountIndex}: ${results.length} result(s)`)
       return results
     },
     [fetchBalance, tokenHelpers, getIsInitialized]
@@ -351,12 +340,10 @@ export function useBalanceFetcher(options: {
    */
   const fetchAllBalances = useCallback(async (): Promise<BalanceFetchResult[]> => {
     if (!getIsInitialized()) {
-      console.log('[BalanceFetcher] Wallet not initialized, skipping balance fetch')
       return []
     }
 
     const allWallets = getAllWallets()
-    console.log(`[BalanceFetcher] Starting to fetch balances for ${allWallets.length} wallet(s)`)
     const results: BalanceFetchResult[] = []
 
     try {
@@ -364,21 +351,15 @@ export function useBalanceFetcher(options: {
       await Promise.all(
         allWallets.map(async (wallet: Wallet) => {
           try {
-            console.log(`[BalanceFetcher] Processing wallet ${wallet.accountIndex}...`)
             const walletResults = await fetchAllBalancesForWallet(
               wallet.accountIndex
             )
             results.push(...walletResults)
-            console.log(`[BalanceFetcher] Completed wallet ${wallet.accountIndex}: ${walletResults.length} balance(s)`)
           } catch (error) {
             console.error(`[BalanceFetcher] Error processing wallet ${wallet.accountIndex}:`, error)
           }
         })
       )
-
-      const successCount = results.filter(r => r.success).length
-      const failCount = results.filter(r => !r.success).length
-      console.log(`[BalanceFetcher] ✅ Completed fetching all balances: ${successCount} success, ${failCount} failed, ${results.length} total`)
     } catch (error) {
       console.error('[BalanceFetcher] Fatal error in fetchAllBalances:', error)
     }
