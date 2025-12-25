@@ -401,12 +401,13 @@ export class WorkletService {
 
   /**
    * Call a method on a wallet account
+   * Supports multiple arguments - they will be passed as an array to the worklet
    */
   static async callAccountMethod<T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
-    args?: unknown
+    ...args: unknown[]
   ): Promise<T> {
     const workletStore = getWorkletStore()
     const workletState = workletStore.getState()
@@ -422,11 +423,20 @@ export class WorkletService {
         throw new Error('HRPC instance not available')
       }
 
+      // If multiple args are provided, pass them as an array
+      // If no args, pass null
+      // If single arg, pass it as-is (for backward compatibility)
+      const argsToPass = args.length === 0 
+        ? null 
+        : args.length === 1 
+          ? args[0] 
+          : args
+
       const response = await currentWorkletState.hrpc.callMethod({
         methodName,
         network,
         accountIndex,
-        args: args ? JSON.stringify(args) : null,
+        args: argsToPass ? JSON.stringify(argsToPass) : null,
       })
 
       if (!response.result) {

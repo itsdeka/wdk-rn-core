@@ -183,10 +183,6 @@ export function useBalanceFetcher(options: {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
-        console.error(
-          `Failed to fetch native balance for ${network}:${accountIndex}:`,
-          error
-        )
         WorkletService.setBalanceLoading(network, accountIndex, null, false)
 
         return {
@@ -251,10 +247,6 @@ export function useBalanceFetcher(options: {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
-        console.error(
-          `Failed to fetch token balance for ${network}:${accountIndex}:${tokenAddress}:`,
-          error
-        )
         WorkletService.setBalanceLoading(network, accountIndex, tokenAddress, false)
 
         return {
@@ -315,7 +307,6 @@ export function useBalanceFetcher(options: {
                 )
                 results.push(result)
               } catch (error) {
-                console.error(`[BalanceFetcher] Error fetching ${network}:${accountIndex}:${token.symbol}:`, error)
                 results.push({
                   success: false,
                   network,
@@ -356,12 +347,12 @@ export function useBalanceFetcher(options: {
             )
             results.push(...walletResults)
           } catch (error) {
-            console.error(`[BalanceFetcher] Error processing wallet ${wallet.accountIndex}:`, error)
+            // Error handling - wallet results not added
           }
         })
       )
     } catch (error) {
-      console.error('[BalanceFetcher] Fatal error in fetchAllBalances:', error)
+      // Fatal error handling
     }
 
     return results

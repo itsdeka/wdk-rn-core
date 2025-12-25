@@ -43,17 +43,6 @@ export interface WdkAppContextValue {
   isFetchingBalances: boolean
   /** Refresh all balances manually */
   refreshBalances: () => Promise<void>
-  /** Import wallet from mnemonic phrase */
-  getSeedAndEntropyFromMnemonic: (mnemonic: string) => Promise<{
-    encryptionKey: string
-    encryptedSeedBuffer: string
-    encryptedEntropyBuffer: string
-  }>
-  /** Initialize WDK with encrypted credentials */
-  initializeWDK: (credentials: {
-    encryptionKey: string
-    encryptedSeed: string
-  }) => Promise<void>
 }
 
 const WdkAppContext = createContext<WdkAppContextValue | null>(null)
@@ -112,8 +101,6 @@ export function WdkAppProvider({
     isInitialized: isWorkletInitialized,
     isLoading: isWorkletLoading,
     startWorklet,
-    getSeedAndEntropyFromMnemonic,
-    initializeWDK,
   } = useWorklet()
 
   // Wallet setup hooks
@@ -455,10 +442,8 @@ export function WdkAppProvider({
       retry,
       isFetchingBalances,
       refreshBalances,
-      getSeedAndEntropyFromMnemonic,
-      initializeWDK,
     }),
-    [isReady, isInitializing, walletExists, needsBiometric, walletInitError, initializationError, retry, isFetchingBalances, refreshBalances, getSeedAndEntropyFromMnemonic, initializeWDK]
+    [isReady, isInitializing, walletExists, needsBiometric, walletInitError, initializationError, retry, isFetchingBalances, refreshBalances]
   )
 
   return <WdkAppContext.Provider value={contextValue}>{children}</WdkAppContext.Provider>
