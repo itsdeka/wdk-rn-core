@@ -21,6 +21,7 @@ import { useWallet } from '../hooks/useWallet'
 import { useBalanceFetcher } from '../hooks/useBalanceFetcher'
 import { getWalletStore } from '../store/walletStore'
 
+
 /**
  * Context state exposed to consumers
  */
@@ -225,6 +226,9 @@ export function WdkAppProvider({
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
         console.error('[WdkAppProvider] Failed to initialize wallet:', error)
+        
+        await secureStorage.deleteWallet()
+        
         setWalletInitError(err)
         // Store error so UI can display it with retry option
       }
@@ -281,9 +285,22 @@ export function WdkAppProvider({
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
       console.error('[WdkAppProvider] Failed to retry wallet initialization:', error)
+      
+      // Check if this is a decryption failure
+      if (isDecryptionError(error)) {
+        console.error('[WdkAppProvider] Decryption failed during retry - clearing corrupted wallet data...')
+        try {
+          await secureStorage.deleteWallet()
+          console.log('[WdkAppProvider] Deleted corrupted wallet data from secure storage')
+        } catch (deleteError) {
+          console.warn('[WdkAppProvider] Failed to delete wallet data:', deleteError)
+          // Continue - we'll still set the error
+        }
+      }
+      
       setWalletInitError(err)
     }
-  }, [hasWalletChecked, isWorkletStarted, walletExists, initializeWallet])
+  }, [hasWalletChecked, isWorkletStarted, walletExists, initializeWallet, secureStorage])
 
   // Handler for manually refreshing balances
   const refreshBalances = useCallback(async () => {
