@@ -15,8 +15,8 @@ jest.mock('react-native', () => ({
 }), { virtual: true });
 
 // Mock react-native-mmkv
-jest.mock('react-native-mmkv', () => ({
-  MMKV: jest.fn(() => ({
+jest.mock('react-native-mmkv', () => {
+  const mockMMKVInstance = {
     set: jest.fn(),
     getString: jest.fn(),
     getNumber: jest.fn(),
@@ -24,8 +24,13 @@ jest.mock('react-native-mmkv', () => ({
     delete: jest.fn(),
     clearAll: jest.fn(),
     contains: jest.fn(),
-  })),
-}), { virtual: true });
+  }
+  
+  return {
+    createMMKV: jest.fn(() => mockMMKVInstance),
+    MMKV: jest.fn(() => mockMMKVInstance),
+  }
+}, { virtual: true });
 
 // Mock react-native-bare-kit
 jest.mock('react-native-bare-kit', () => ({
@@ -46,4 +51,7 @@ jest.mock('pear-wrk-wdk', () => ({
   })),
   bundle: {},
 }), { virtual: true });
+
+// Note: React mock is not needed in setup.ts since it's only required for tests that use zustand stores
+// Those tests will mock React locally to avoid issues with module resolution
 

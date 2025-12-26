@@ -41,7 +41,9 @@ export function createMMKVStorageAdapter(): StorageAdapter {
       storage.set(name, value)
     },
     removeItem: (name: string): void => {
-      storage.remove(name)
+      // MMKV uses 'delete' method but TypeScript types may not include it
+      // Using type assertion to access the method
+      ;(storage as any).delete(name)
     },
   }
 }

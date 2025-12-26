@@ -141,12 +141,17 @@ export class WorkletService {
       })
 
       // NEVER store seed phrase
+      // Type assertion: result from initializeWDK may have any shape, we only care about status
+      const wdkInitResult: { status?: string | null } | null = result && typeof result === 'object' && 'status' in result 
+        ? { status: (result as { status?: string | null }).status } 
+        : result as { status?: string | null } | null
+
       store.setState({
         isInitialized: true,
         isLoading: false,
         encryptedSeed: options.encryptedSeed,
         encryptionKey: options.encryptionKey,
-        wdkInitResult: result,
+        wdkInitResult,
         error: null,
       })
     } catch (error) {

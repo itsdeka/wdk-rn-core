@@ -11,6 +11,7 @@ export const createSecureStorage = jest.fn(() => ({
   setEncryptedSeed: jest.fn().mockResolvedValue(undefined),
   setEncryptedEntropy: jest.fn().mockResolvedValue(undefined),
   deleteWallet: jest.fn().mockResolvedValue(undefined),
+  isBiometricAvailable: jest.fn().mockResolvedValue(true),
 }));
 
 export type SecureStorage = ReturnType<typeof createSecureStorage>;

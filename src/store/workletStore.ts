@@ -37,6 +37,8 @@ export interface WorkletState {
   encryptedSeed: string | null
   encryptionKey: string | null
   // NOTE: seedPhrase is NEVER stored - we only use encrypted approach
+  // NOTE: encryptedEntropy is stored in secure storage but not in runtime state
+  // It's only needed when retrieving mnemonic, so it's loaded from secure storage on demand
   networkConfigs: NetworkConfigs | null
   workletStartResult: WorkletStartResponse | null
   wdkInitResult: { status?: string | null } | null
@@ -85,7 +87,8 @@ export function createWorkletStore(): WorkletStoreInstance {
         partialize: (state) => ({
           // NEVER persist seedPhrase - only encrypted seed
           // encryptionKey is NOT persisted - stored in secure storage with biometrics
-          encryptedSeed: state.encryptedSeed,
+          // encryptedSeed is NOT persisted - stored in secure storage with biometrics
+          // Both are runtime-only and loaded from keychain when needed
           networkConfigs: state.networkConfigs,
           workletStartResult: state.workletStartResult,
           wdkInitResult: state.wdkInitResult,
