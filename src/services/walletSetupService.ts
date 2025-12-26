@@ -62,13 +62,13 @@ export class WalletSetupService {
   }> {
     console.log('🔓 Loading existing wallet - biometric authentication required...')
     
-    const encryptionKey = await secureStorage.getEncryptionKey()
+    const allEncrypted = await secureStorage.getAllEncrypted()
+
+    const { encryptionKey, encryptedSeed } = allEncrypted
 
     if (!encryptionKey) {
       throw new Error('Encryption key not found. Authentication may have failed or wallet does not exist.')
     }
-
-    const encryptedSeed = await secureStorage.getEncryptedSeed()
 
     if (!encryptedSeed) {
       throw new Error('Encrypted seed not found. Authentication may have failed or wallet does not exist.')
