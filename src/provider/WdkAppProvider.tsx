@@ -230,15 +230,6 @@ export function WdkAppProvider({
       const err = normalizeError(error)
       console.error('[WdkAppProvider] Failed to initialize wallet:', error)
       
-      // Attempt to clean up corrupted wallet data on any initialization error
-      try {
-        await secureStorage.deleteWallet()
-        console.log('[WdkAppProvider] Deleted wallet data from secure storage after initialization failure')
-      } catch (deleteError) {
-        console.warn('[WdkAppProvider] Failed to delete wallet data:', deleteError)
-        // Continue - we'll still set the error
-      }
-      
       setWalletInitError(err)
       // Store error so UI can display it with retry option
       throw err
