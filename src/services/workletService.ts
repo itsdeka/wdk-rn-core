@@ -51,11 +51,16 @@ export class WorkletService {
 
       const worklet = new Worklet()
 
-      // @ts-ignore - pear-wrk-wdk may not have complete type definitions
-      const { bundle } = await import('pear-wrk-wdk')
+      // Dynamic import of pear-wrk-wdk bundle
+      const pearWrkWdk = await import('pear-wrk-wdk')
+      const bundle = (pearWrkWdk as { bundle?: unknown }).bundle
 
-      // @ts-ignore - Bundle file (mobile bundle for React Native) - worklet.start expects bundle parameter
-      worklet.start('/wdk-worklet.bundle', bundle)
+      if (!bundle) {
+        throw new Error('Failed to load pear-wrk-wdk bundle')
+      }
+
+      // Bundle file (mobile bundle for React Native) - worklet.start expects bundle parameter
+      ;(worklet.start as (path: string, bundle: unknown) => void)('/wdk-worklet.bundle', bundle)
 
       const { IPC } = worklet
 
@@ -128,8 +133,8 @@ export class WorkletService {
         throw new Error('HRPC instance not available')
       }
 
-      // @ts-ignore - initializeWDK exists on HRPC but may not be in types yet
-      const result = await currentState.hrpc.initializeWDK({
+      // initializeWDK exists on HRPC but may not be in types yet
+      const result = await (currentState.hrpc as unknown as { initializeWDK: (options: { encryptionKey: string; encryptedSeed: string; config: string }) => Promise<unknown> }).initializeWDK({
         encryptionKey: options.encryptionKey,
         encryptedSeed: options.encryptedSeed,
         config: JSON.stringify(currentState.networkConfigs || {}),
@@ -175,8 +180,8 @@ export class WorkletService {
     }
 
     try {
-      // @ts-ignore - generateEntropyAndEncrypt may not be in types yet
-      const result = await state.hrpc.generateEntropyAndEncrypt({
+      // generateEntropyAndEncrypt may not be in types yet
+      const result = await (state.hrpc as unknown as { generateEntropyAndEncrypt: (options: { wordCount: number }) => Promise<{ encryptionKey: string; encryptedSeedBuffer: string; encryptedEntropyBuffer: string }> }).generateEntropyAndEncrypt({
         wordCount,
       })
 
@@ -219,8 +224,8 @@ export class WorkletService {
     }
 
     try {
-      // @ts-ignore - getMnemonicFromEntropy may not be in types yet
-      const result = await state.hrpc.getMnemonicFromEntropy({
+      // getMnemonicFromEntropy may not be in types yet
+      const result = await (state.hrpc as unknown as { getMnemonicFromEntropy: (options: { encryptedEntropy: string; encryptionKey: string }) => Promise<{ mnemonic: string }> }).getMnemonicFromEntropy({
         encryptedEntropy,
         encryptionKey,
       })
@@ -254,8 +259,8 @@ export class WorkletService {
     }
 
     try {
-      // @ts-ignore - getSeedAndEntropyFromMnemonic may not be in types yet
-      const result = await state.hrpc.getSeedAndEntropyFromMnemonic({
+      // getSeedAndEntropyFromMnemonic may not be in types yet
+      const result = await (state.hrpc as unknown as { getSeedAndEntropyFromMnemonic: (options: { mnemonic: string }) => Promise<{ encryptionKey: string; encryptedSeedBuffer: string; encryptedEntropyBuffer: string }> }).getSeedAndEntropyFromMnemonic({
         mnemonic,
       })
 
@@ -401,13 +406,12 @@ export class WorkletService {
 
   /**
    * Call a method on a wallet account
-   * Supports multiple arguments - they will be passed as an array to the worklet
    */
   static async callAccountMethod<T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
-    ...args: unknown[]
+    args?: unknown
   ): Promise<T> {
     const workletStore = getWorkletStore()
     const workletState = workletStore.getState()
@@ -423,20 +427,11 @@ export class WorkletService {
         throw new Error('HRPC instance not available')
       }
 
-      // If multiple args are provided, pass them as an array
-      // If no args, pass null
-      // If single arg, pass it as-is (for backward compatibility)
-      const argsToPass = args.length === 0 
-        ? null 
-        : args.length === 1 
-          ? args[0] 
-          : args
-
       const response = await currentWorkletState.hrpc.callMethod({
         methodName,
         network,
         accountIndex,
-        args: argsToPass ? JSON.stringify(argsToPass) : null,
+        args: args ? JSON.stringify(args) : null,
       })
 
       if (!response.result) {

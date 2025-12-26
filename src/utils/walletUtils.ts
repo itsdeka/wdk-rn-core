@@ -64,9 +64,9 @@ export function createBaseWalletStore(): Pick<WalletStore, 'callAccountMethod' |
       network: string,
       accountIndex: number,
       methodName: string,
-      ...args: unknown[]
+      args?: unknown
     ): Promise<T> => {
-      return WorkletService.callAccountMethod<T>(network, accountIndex, methodName, ...args)
+      return WorkletService.callAccountMethod<T>(network, accountIndex, methodName, args)
     },
 
     isWalletInitialized: () => {

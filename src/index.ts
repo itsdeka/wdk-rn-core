@@ -59,4 +59,6 @@ export type { WdkAppProviderProps, WdkAppContextValue } from './provider/WdkAppP
 // Utils
 export { validateMnemonic } from './utils/mnemonicUtils'
 export { convertBalanceToString, formatBalance } from './utils/balanceUtils'
+export { normalizeError, getErrorMessage, isErrorType, createContextualError } from './utils/errorUtils'
+export { validateNetworkConfigs, validateTokenConfigs, validateBalanceRefreshInterval } from './utils/validation'
 

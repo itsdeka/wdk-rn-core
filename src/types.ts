@@ -212,14 +212,14 @@ export interface WalletStore {
    * @param network - Network name (e.g., 'ethereum')
    * @param accountIndex - Account index
    * @param methodName - Method name to call (e.g., 'getBalance', 'getTokenBalance')
-   * @param args - Optional arguments for the method (supports multiple arguments)
+   * @param args - Optional arguments for the method
    * @returns Promise with the method result
    */
   callAccountMethod: <T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
-    ...args: unknown[]
+    args?: unknown
   ) => Promise<T>
 
   /**
