@@ -2,6 +2,8 @@
  * Balance utility functions
  */
 
+import { logError } from './logger'
+
 /**
  * Convert a value to string, handling BigInt values
  */
@@ -58,7 +60,7 @@ export function formatBalance(balance: string | null, decimals: number): string 
 
     return `${wholePart}.${fractionalTrimmed}`
   } catch (error) {
-    console.error('Error formatting balance:', error)
+    logError('Error formatting balance:', error)
     return balance
   }
 }

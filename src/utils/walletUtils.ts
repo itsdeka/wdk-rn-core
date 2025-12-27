@@ -6,7 +6,7 @@
 
 import type { WalletStore as WalletStoreType } from '../store/walletStore'
 import type { WalletStore } from '../types'
-import { WorkletService } from '../services/workletService'
+import { AddressService } from '../services/addressService'
 import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
 
@@ -66,7 +66,7 @@ export function createBaseWalletStore(): Pick<WalletStore, 'callAccountMethod' |
       methodName: string,
       args?: unknown
     ): Promise<T> => {
-      return WorkletService.callAccountMethod<T>(network, accountIndex, methodName, args)
+      return AddressService.callAccountMethod<T>(network, accountIndex, methodName, args)
     },
 
     isWalletInitialized: () => {

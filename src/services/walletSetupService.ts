@@ -2,7 +2,9 @@ import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import { createSecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import type { NetworkConfigs } from '../types'
 import { getWorkletStore } from '../store/workletStore'
-import { WorkletService } from './workletService'
+import { WorkletLifecycleService } from './workletLifecycleService'
+import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
+import { log } from '../utils/logger'
 
 /**
  * Wallet setup service
@@ -24,7 +26,7 @@ export class WalletSetupService {
     const store = getWorkletStore()
 
     // Step 1: Require biometric authentication before creating wallet
-    console.log('🔐 Creating new wallet - biometric authentication required...')
+    log('🔐 Creating new wallet - biometric authentication required...')
     const authenticated = await secureStorage.authenticate()
     if (!authenticated) {
       throw new Error('Biometric authentication required to create wallet')
@@ -32,18 +34,19 @@ export class WalletSetupService {
 
     // Step 2: Start worklet
     if (!store.getState().isWorkletStarted) {
-      await WorkletService.startWorklet(networkConfigs)
+      await WorkletLifecycleService.startWorklet(networkConfigs)
     }
 
     // Step 3: Generate entropy and encrypt
-    const result = await WorkletService.generateEntropyAndEncrypt(12)
+    const result = await WorkletLifecycleService.generateEntropyAndEncrypt(DEFAULT_MNEMONIC_WORD_COUNT)
 
     // Step 4: Store credentials securely
     await secureStorage.setEncryptionKey(result.encryptionKey)
     await secureStorage.setEncryptedSeed(result.encryptedSeedBuffer)
     await secureStorage.setEncryptedEntropy(result.encryptedEntropyBuffer)
 
-    console.log('✅ New wallet created and stored securely')
+    log('✅ New wallet created and stored securely')
+    
     return {
       encryptionKey: result.encryptionKey,
       encryptedSeed: result.encryptedSeedBuffer,
@@ -60,7 +63,7 @@ export class WalletSetupService {
     encryptionKey: string
     encryptedSeed: string
   }> {
-    console.log('🔓 Loading existing wallet - biometric authentication required...')
+    log('🔓 Loading existing wallet - biometric authentication required...')
     
     const allEncrypted = await secureStorage.getAllEncrypted()
 
@@ -74,7 +77,7 @@ export class WalletSetupService {
       throw new Error('Encrypted seed not found. Authentication may have failed or wallet does not exist.')
     }
 
-    console.log('✅ Wallet loaded successfully from secure storage')
+    log('✅ Wallet loaded successfully from secure storage')
     return {
       encryptionKey,
       encryptedSeed,
@@ -105,7 +108,7 @@ export class WalletSetupService {
     const store = getWorkletStore()
 
     // Step 1: Require biometric authentication before importing wallet
-    console.log('🔐 Importing wallet from mnemonic - biometric authentication required...')
+    log('🔐 Importing wallet from mnemonic - biometric authentication required...')
     const authenticated = await secureStorage.authenticate()
     if (!authenticated) {
       throw new Error('Biometric authentication required to import wallet')
@@ -113,11 +116,11 @@ export class WalletSetupService {
 
     // Step 2: Start worklet
     if (!store.getState().isWorkletStarted) {
-      await WorkletService.startWorklet(networkConfigs)
+      await WorkletLifecycleService.startWorklet(networkConfigs)
     }
 
     // Step 3: Get seed and entropy from mnemonic
-    const result = await WorkletService.getSeedAndEntropyFromMnemonic(mnemonic)
+    const result = await WorkletLifecycleService.getSeedAndEntropyFromMnemonic(mnemonic)
 
     // Step 4: Store credentials securely
     await secureStorage.setEncryptionKey(result.encryptionKey)
@@ -125,12 +128,13 @@ export class WalletSetupService {
     await secureStorage.setEncryptedEntropy(result.encryptedEntropyBuffer)
 
     // Step 5: Initialize WDK with the credentials
-    await WorkletService.initializeWDK({
+    await WorkletLifecycleService.initializeWDK({
       encryptionKey: result.encryptionKey,
       encryptedSeed: result.encryptedSeedBuffer,
     })
 
-    console.log('✅ Wallet imported from mnemonic and stored securely')
+    log('✅ Wallet imported from mnemonic and stored securely')
+    
     return {
       encryptionKey: result.encryptionKey,
       encryptedSeed: result.encryptedSeedBuffer,
@@ -152,13 +156,13 @@ export class WalletSetupService {
 
     // Ensure worklet is started
     if (!store.getState().isWorkletStarted) {
-      console.log('Starting worklet...')
-      await WorkletService.startWorklet(networkConfigs)
-      console.log('Worklet started')
+      log('Starting worklet...')
+      await WorkletLifecycleService.startWorklet(networkConfigs)
+      log('Worklet started')
     }
 
     // Initialize WDK
-    await WorkletService.initializeWDK(credentials)
+    await WorkletLifecycleService.initializeWDK(credentials)
   }
 
   /**
@@ -176,7 +180,7 @@ export class WalletSetupService {
 
     // Check if already initialized
     if (store.getState().isInitialized) {
-      console.log('Wallet already initialized')
+      log('Wallet already initialized')
       return
     }
 
@@ -184,11 +188,11 @@ export class WalletSetupService {
 
     if (options.createNew) {
       // Create new wallet
-      console.log('Creating new wallet...')
+      log('Creating new wallet...')
       credentials = await this.createNewWallet(secureStorage, networkConfigs)
     } else {
       // Load existing wallet (requires biometric authentication)
-      console.log('Loading existing wallet...')
+      log('Loading existing wallet...')
       credentials = await this.loadExistingWallet(secureStorage)
     }
 
@@ -213,7 +217,7 @@ export class WalletSetupService {
     await storage.deleteWallet()
 
     // Reset store state
-    WorkletService.reset()
+    WorkletLifecycleService.reset()
   }
 }
 

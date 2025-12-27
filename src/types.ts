@@ -195,7 +195,7 @@ export interface Wallet {
  * - Wallet management utilities
  *
  * NOTE: Balance management is worklet-level, not store-level.
- * Use WorkletService or useWallet hook for balance operations.
+ * Use BalanceService or useWallet hook for balance operations.
  *
  * Apps can extend this interface with app-specific methods.
  */
@@ -239,6 +239,8 @@ export interface WalletStore {
 
   /**
    * Index signature for compatibility with Record<string, unknown>
+   * Note: This is intentionally broad to allow app-specific extensions.
+   * Apps should extend this interface with specific methods rather than using the index signature.
    */
   [key: string]: unknown
 }

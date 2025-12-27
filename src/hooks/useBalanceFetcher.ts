@@ -14,20 +14,22 @@
 import { useCallback, useMemo } from 'react'
 
 // Internal modules
-import {
-  WorkletService,
-  getWorkletStore,
-  getWalletStore,
-  type TokenConfig,
-  type TokenConfigs,
-  type Wallet,
-  type BalanceFetchResult,
-  type TokenConfigProvider,
-  type TokenHelpers,
-} from '../index'
+import { getWorkletStore } from '../store/workletStore'
+import { getWalletStore } from '../store/walletStore'
+import type {
+  TokenConfig,
+  TokenConfigs,
+  Wallet,
+  BalanceFetchResult,
+  TokenConfigProvider,
+  TokenHelpers,
+} from '../types'
+import { AddressService } from '../services/addressService'
+import { BalanceService } from '../services/balanceService'
 
 // Local imports
 import { convertBalanceToString } from '../utils/balanceUtils'
+import { log, logError, logWarn } from '../utils/logger'
 
 /**
  * Create token helpers from token configs
@@ -111,6 +113,22 @@ export function useBalanceFetcher(options: {
       '[useBalanceFetcher] walletStore is required'
     )
   }
+  
+  // Validate walletStore has required Zustand methods
+  // Note: getAllWallets, callAccountMethod, and isWalletInitialized are not methods on walletStore
+  // They are provided by helper functions and services (getAllWalletsFromWalletStore, AddressService)
+  if (typeof walletStore.getState !== 'function') {
+    throw new Error(
+      '[useBalanceFetcher] walletStore must be a valid Zustand store with getState method'
+    )
+  }
+  
+  // Validate tokenConfigs
+  if (!tokenConfigProvider) {
+    throw new Error(
+      '[useBalanceFetcher] tokenConfigs is required'
+    )
+  }
 
   // Check initialization state from worklet store (internal check)
   const getIsInitialized = useCallback(() => {
@@ -154,26 +172,26 @@ export function useBalanceFetcher(options: {
         }
       }
 
-      WorkletService.setBalanceLoading(network, accountIndex, null, true)
+      BalanceService.setBalanceLoading(network, accountIndex, null, true)
 
       try {
-        console.log(`[BalanceFetcher] Calling getBalance for ${network}:${accountIndex}...`)
+        log(`[BalanceFetcher] Calling getBalance for ${network}:${accountIndex}...`)
         // Call getBalance method on the account for native token
-        const balanceResult = await WorkletService.callAccountMethod<unknown>(
+        const balanceResult = await AddressService.callAccountMethod<unknown>(
           network,
           accountIndex,
           'getBalance',
           null
         )
-        console.log(`[BalanceFetcher] getBalance result for ${network}:${accountIndex}:`, balanceResult)
+        log(`[BalanceFetcher] getBalance result for ${network}:${accountIndex}:`, balanceResult)
 
         // Convert to string (handles BigInt values)
         const balance = convertBalanceToString(balanceResult)
 
         // Update store with fetched balance
-        WorkletService.updateBalance(accountIndex, network, null, balance)
-        WorkletService.updateLastBalanceUpdate(network, accountIndex)
-        WorkletService.setBalanceLoading(network, accountIndex, null, false)
+        BalanceService.updateBalance(accountIndex, network, null, balance)
+        BalanceService.updateLastBalanceUpdate(network, accountIndex)
+        BalanceService.setBalanceLoading(network, accountIndex, null, false)
 
         return {
           success: true,
@@ -185,11 +203,11 @@ export function useBalanceFetcher(options: {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
-        console.error(
+        logError(
           `Failed to fetch native balance for ${network}:${accountIndex}:`,
           error
         )
-        WorkletService.setBalanceLoading(network, accountIndex, null, false)
+        BalanceService.setBalanceLoading(network, accountIndex, null, false)
 
         return {
           success: false,
@@ -224,11 +242,11 @@ export function useBalanceFetcher(options: {
         }
       }
 
-      WorkletService.setBalanceLoading(network, accountIndex, tokenAddress, true)
+      BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, true)
 
       try {
         // Call getTokenBalance method on the account for ERC20 token
-        const balanceResult = await WorkletService.callAccountMethod<unknown>(
+        const balanceResult = await AddressService.callAccountMethod<unknown>(
           network,
           accountIndex,
           'getTokenBalance',
@@ -239,9 +257,9 @@ export function useBalanceFetcher(options: {
         const balance = convertBalanceToString(balanceResult)
 
         // Update store with fetched balance
-        WorkletService.updateBalance(accountIndex, network, tokenAddress, balance)
-        WorkletService.updateLastBalanceUpdate(network, accountIndex)
-        WorkletService.setBalanceLoading(network, accountIndex, tokenAddress, false)
+        BalanceService.updateBalance(accountIndex, network, tokenAddress, balance)
+        BalanceService.updateLastBalanceUpdate(network, accountIndex)
+        BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, false)
 
         return {
           success: true,
@@ -253,11 +271,11 @@ export function useBalanceFetcher(options: {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
-        console.error(
+        logError(
           `Failed to fetch token balance for ${network}:${accountIndex}:${tokenAddress}:`,
           error
         )
-        WorkletService.setBalanceLoading(network, accountIndex, tokenAddress, false)
+        BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, false)
 
         return {
           success: false,
@@ -296,51 +314,44 @@ export function useBalanceFetcher(options: {
   const fetchAllBalancesForWallet = useCallback(
     async (accountIndex: number): Promise<BalanceFetchResult[]> => {
       if (!getIsInitialized()) {
-        console.log(`[BalanceFetcher] Wallet not initialized, skipping wallet ${accountIndex}`)
+        log(`[BalanceFetcher] Wallet not initialized, skipping wallet ${accountIndex}`)
         return []
       }
 
       const networks = tokenHelpers.getSupportedNetworks()
-      console.log(`[BalanceFetcher] Fetching balances for wallet ${accountIndex} across ${networks.length} network(s): ${networks.join(', ')}`)
-      const results: BalanceFetchResult[] = []
+      log(`[BalanceFetcher] Fetching balances for wallet ${accountIndex} across ${networks.length} network(s): ${networks.join(', ')}`)
+      
+      // Collect all fetch promises and their metadata
+      const fetchPromises: Array<Promise<BalanceFetchResult>> = []
+      const tokenMetadata: Array<{ network: string; token: TokenConfig }> = []
 
-      // Fetch balances for all networks and tokens in parallel
-      await Promise.all(
-        networks.map(async (network) => {
-          const tokens = tokenHelpers.getTokensForNetwork(network)
-          console.log(`[BalanceFetcher] Network ${network}: fetching ${tokens.length} token(s)`)
-
-          await Promise.all(
-            tokens.map(async (token) => {
-              try {
-                const result = await fetchBalance(
-                  network,
-                  accountIndex,
-                  token.address
-                )
-                if (result.success) {
-                  console.log(`[BalanceFetcher] ✓ ${network}:${accountIndex}:${token.symbol} = ${result.balance}`)
-                } else {
-                  console.warn(`[BalanceFetcher] ✗ ${network}:${accountIndex}:${token.symbol}: ${result.error}`)
-                }
-                results.push(result)
-              } catch (error) {
-                console.error(`[BalanceFetcher] Error fetching ${network}:${accountIndex}:${token.symbol}:`, error)
-                results.push({
-                  success: false,
-                  network,
-                  accountIndex,
-                  tokenAddress: token.address,
-                  balance: null,
-                  error: error instanceof Error ? error.message : String(error),
-                })
-              }
-            })
-          )
+      networks.forEach((network) => {
+        const tokens = tokenHelpers.getTokensForNetwork(network)
+        tokens.forEach((token) => {
+          fetchPromises.push(fetchBalance(network, accountIndex, token.address))
+          tokenMetadata.push({ network, token })
         })
-      )
+      })
 
-      console.log(`[BalanceFetcher] Completed fetching balances for wallet ${accountIndex}: ${results.length} result(s)`)
+      // Execute all fetches in parallel
+      const results = await Promise.all(fetchPromises)
+
+      // Log results
+      results.forEach((result, index) => {
+        const metadata = tokenMetadata[index]
+        if (!metadata) {
+          logWarn(`[BalanceFetcher] Missing token metadata for result at index ${index}`)
+          return
+        }
+        const { network, token } = metadata
+        if (result.success) {
+          log(`[BalanceFetcher] ✓ ${network}:${accountIndex}:${token.symbol} = ${result.balance}`)
+        } else {
+          logWarn(`[BalanceFetcher] ✗ ${network}:${accountIndex}:${token.symbol}: ${result.error}`)
+        }
+      })
+
+      log(`[BalanceFetcher] Completed fetching balances for wallet ${accountIndex}: ${results.length} result(s)`)
       return results
     },
     [fetchBalance, tokenHelpers, getIsInitialized]
@@ -351,36 +362,34 @@ export function useBalanceFetcher(options: {
    */
   const fetchAllBalances = useCallback(async (): Promise<BalanceFetchResult[]> => {
     if (!getIsInitialized()) {
-      console.log('[BalanceFetcher] Wallet not initialized, skipping balance fetch')
+      log('[BalanceFetcher] Wallet not initialized, skipping balance fetch')
       return []
     }
 
     const allWallets = getAllWallets()
-    console.log(`[BalanceFetcher] Starting to fetch balances for ${allWallets.length} wallet(s)`)
+    log(`[BalanceFetcher] Starting to fetch balances for ${allWallets.length} wallet(s)`)
     const results: BalanceFetchResult[] = []
 
     try {
-      // Fetch balances for all wallets in parallel
-      await Promise.all(
-        allWallets.map(async (wallet: Wallet) => {
-          try {
-            console.log(`[BalanceFetcher] Processing wallet ${wallet.accountIndex}...`)
-            const walletResults = await fetchAllBalancesForWallet(
-              wallet.accountIndex
-            )
-            results.push(...walletResults)
-            console.log(`[BalanceFetcher] Completed wallet ${wallet.accountIndex}: ${walletResults.length} balance(s)`)
-          } catch (error) {
-            console.error(`[BalanceFetcher] Error processing wallet ${wallet.accountIndex}:`, error)
-          }
-        })
-      )
+      // Process wallets sequentially
+      for (const wallet of allWallets) {
+        try {
+          log(`[BalanceFetcher] Processing wallet ${wallet.accountIndex}...`)
+          const walletResults = await fetchAllBalancesForWallet(
+            wallet.accountIndex
+          )
+          results.push(...walletResults)
+          log(`[BalanceFetcher] Completed wallet ${wallet.accountIndex}: ${walletResults.length} balance(s)`)
+        } catch (error) {
+          logError(`[BalanceFetcher] Error processing wallet ${wallet.accountIndex}:`, error)
+        }
+      }
 
       const successCount = results.filter(r => r.success).length
       const failCount = results.filter(r => !r.success).length
-      console.log(`[BalanceFetcher] ✅ Completed fetching all balances: ${successCount} success, ${failCount} failed, ${results.length} total`)
+      log(`[BalanceFetcher] ✅ Completed fetching all balances: ${successCount} success, ${failCount} failed, ${results.length} total`)
     } catch (error) {
-      console.error('[BalanceFetcher] Fatal error in fetchAllBalances:', error)
+      logError('[BalanceFetcher] Fatal error in fetchAllBalances:', error)
     }
 
     return results

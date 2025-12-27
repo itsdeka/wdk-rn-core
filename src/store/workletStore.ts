@@ -8,9 +8,9 @@
  * - workletStore.ts: Stores worklet lifecycle state
  * - walletStore.ts: Stores addresses and balances
  * - types.ts: All type definitions (network, token, and wallet types)
- * - services/workletService.ts: All worklet operations (startWorklet, initializeWDK, etc.)
+ * - services/workletLifecycleService.ts: All worklet lifecycle operations (startWorklet, initializeWDK, etc.)
  * 
- * All operations are handled by WorkletService, not the store itself.
+ * All operations are handled by WorkletLifecycleService, not the store itself.
  */
 
 // External packages
@@ -25,6 +25,7 @@ import type {
   NetworkConfigs,
 } from '../types'
 import { createMMKVStorageAdapter } from '../storage/mmkvStorage'
+import { log } from '../utils/logger'
 
 export interface WorkletState {
   worklet: Worklet | null
@@ -69,7 +70,7 @@ let workletStoreInstance: WorkletStoreInstance | null = null
 
 /**
  * Creates singleton worklet store instance.
- * All operations are handled by WorkletService, not the store itself.
+ * All operations are handled by WorkletLifecycleService, not the store itself.
  */
 export function createWorkletStore(): WorkletStoreInstance {
   if (workletStoreInstance) {
@@ -96,7 +97,7 @@ export function createWorkletStore(): WorkletStoreInstance {
         onRehydrateStorage: () => {
           return (state) => {
             if (state) {
-              console.log('🔄 Rehydrating worklet state - resetting initialization flags (worklet/HRPC are runtime-only)')
+              log('🔄 Rehydrating worklet state - resetting initialization flags (worklet/HRPC are runtime-only)')
               state.isInitialized = false
               state.isWorkletStarted = false
               state.worklet = null
@@ -117,4 +118,24 @@ export function createWorkletStore(): WorkletStoreInstance {
 
 export function getWorkletStore() {
   return createWorkletStore()
+}
+
+/**
+ * Clear sensitive data from memory
+ * This should be called when sensitive data is no longer needed
+ * to minimize exposure in memory dumps or debugging
+ */
+export function clearSensitiveData(): void {
+  const store = getWorkletStore()
+  store.setState({
+    encryptedSeed: null,
+    encryptionKey: null,
+  })
+}
+
+/**
+ * Reset the worklet store instance (useful for testing)
+ */
+export function resetWorkletStore(): void {
+  workletStoreInstance = null
 }

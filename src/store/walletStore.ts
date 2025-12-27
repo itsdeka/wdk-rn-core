@@ -8,10 +8,11 @@
  *   - Balances: { [network]: { [accountIndex]: { [tokenAddress]: balance } } }
  * - types.ts: All type definitions (network, token, and wallet types)
  * - utils/walletUtils.ts: Helper functions to retrieve data from walletStore
- * - services/workletService.ts: All worklet operations (getAddress, updateBalance, etc.)
+ * - services/addressService.ts: Address operations (getAddress, callAccountMethod)
+ * - services/balanceService.ts: Balance operations (updateBalance, getBalance, etc.)
  * 
  * Addresses and balances are persisted here and retrieved by wallet stores on-the-fly.
- * All operations are handled by WorkletService, not the store itself.
+ * All operations are handled by focused services (AddressService, BalanceService), not the store itself.
  */
 
 // External packages
@@ -25,6 +26,7 @@ import type {
   BalanceLoadingStates,
 } from '../types'
 import { createMMKVStorageAdapter } from '../storage/mmkvStorage'
+import { log } from '../utils/logger'
 
 export interface WalletLoadingStates {
   [key: string]: boolean
@@ -59,7 +61,7 @@ let walletStoreInstance: WalletStoreInstance | null = null
 
 /**
  * Creates singleton wallet store instance.
- * All operations are handled by WorkletService, not the store itself.
+ * All operations are handled by focused services (AddressService, BalanceService), not the store itself.
  */
 export function createWalletStore(): WalletStoreInstance {
   if (walletStoreInstance) {
@@ -83,7 +85,7 @@ export function createWalletStore(): WalletStoreInstance {
         onRehydrateStorage: () => {
           return (state) => {
             if (state) {
-              console.log('🔄 Rehydrating wallet state - resetting loading states')
+              log('🔄 Rehydrating wallet state - resetting loading states')
               state.walletLoading = {}
               state.balanceLoading = {}
             }

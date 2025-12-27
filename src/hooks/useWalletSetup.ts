@@ -7,6 +7,7 @@ import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 // Local imports
 import { WalletSetupService } from '../services/walletSetupService'
 import type { NetworkConfigs } from '../types'
+import { logError } from '../utils/logger'
 
 /**
  * Hook for wallet initialization and lifecycle management
@@ -58,7 +59,7 @@ export function useWalletSetup(
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : String(err)
-        console.error('Failed to initialize wallet:', err)
+        logError('Failed to initialize wallet:', err)
         setError(errorMessage)
         throw err
       } finally {
@@ -92,7 +93,7 @@ export function useWalletSetup(
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : String(err)
-        console.error('Failed to initialize wallet from mnemonic:', err)
+        logError('Failed to initialize wallet from mnemonic:', err)
         setError(errorMessage)
         throw err
       } finally {
@@ -114,7 +115,7 @@ export function useWalletSetup(
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : String(err)
-      console.error('Failed to delete wallet:', err)
+      logError('Failed to delete wallet:', err)
       setError(errorMessage)
       throw err
     } finally {

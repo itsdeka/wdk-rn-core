@@ -12,17 +12,16 @@
  * concerns like auth state or UI branding.
  */
 
-import React, { createContext, useContext, useEffect, useRef, useState, useMemo, useCallback } from 'react'
+import React, { createContext, useEffect, useMemo } from 'react'
 import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import type { NetworkConfigs, TokenConfigs } from '../types'
-import { useWorklet } from '../hooks/useWorklet'
-import { useWalletSetup } from '../hooks/useWalletSetup'
-import { useWallet } from '../hooks/useWallet'
-import { useBalanceFetcher } from '../hooks/useBalanceFetcher'
-import { getWalletStore } from '../store/walletStore'
-import { getWorkletStore } from '../store/workletStore'
+import { useWdkInitialization } from '../hooks/useWdkInitialization'
+import { useWdkBalanceSync } from '../hooks/useWdkBalanceSync'
+import { useAbortController } from '../hooks/useAbortController'
 import { validateNetworkConfigs, validateTokenConfigs, validateBalanceRefreshInterval } from '../utils/validation'
 import { normalizeError } from '../utils/errorUtils'
+import { DEFAULT_BALANCE_REFRESH_INTERVAL_MS } from '../utils/constants'
+import { logError } from '../utils/logger'
 
 
 /**
@@ -83,245 +82,58 @@ export function WdkAppProvider({
   tokenConfigs,
   requireBiometric = false,
   autoFetchBalances = true,
-  balanceRefreshInterval = 30000, // 30 seconds
+  balanceRefreshInterval = DEFAULT_BALANCE_REFRESH_INTERVAL_MS,
   children,
 }: WdkAppProviderProps) {
-  // Validate props on mount
-  React.useEffect(() => {
+  // Validate props on mount and when props change
+  useEffect(() => {
     try {
       validateNetworkConfigs(networkConfigs)
       validateTokenConfigs(tokenConfigs)
       validateBalanceRefreshInterval(balanceRefreshInterval)
-    } catch (error) {
-      console.error('[WdkAppProvider] Invalid props:', error)
-      // In development, throw to catch issues early
-      if (process.env.NODE_ENV !== 'production') {
-        throw error
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Only validate on mount
-
-  // Track initialization state
-  const [hasWalletChecked, setHasWalletChecked] = useState(false)
-  const [walletExists, setWalletExists] = useState<boolean | null>(null)
-  const [biometricAuthenticated, setBiometricAuthenticated] = useState(!requireBiometric)
-  const [initializationError, setInitializationError] = useState<Error | null>(null)
-  const [walletInitError, setWalletInitError] = useState<Error | null>(null)
-  const [isFetchingBalances, setIsFetchingBalances] = useState(false)
-
-  // Use refs to track initialization attempts without causing re-renders
-  const hasAttemptedWorkletInitialization = useRef(false)
-  const hasAttemptedWalletInitialization = useRef(false)
-  const hasCompletedInitialBalanceFetch = useRef(false)
-
-  // Worklet hooks
-  const {
-    isWorkletStarted,
-    isInitialized: isWorkletInitialized,
-    isLoading: isWorkletLoading,
-    startWorklet,
-  } = useWorklet()
-
-  // Wallet setup hooks
-  const {
-    initializeWallet,
-    hasWallet,
-    isInitializing: isWalletInitializing,
-  } = useWalletSetup(secureStorage, networkConfigs)
-
-  // Wallet state hook - to check if wallet is actually initialized
-  const { isInitialized: walletInitialized } = useWallet()
-
-  // Balance fetcher hook
-  const { fetchAllBalances } = useBalanceFetcher({
-    walletStore: getWalletStore(),
-    tokenConfigs,
-  })
-
-  // Initialize worklet immediately when component mounts
-  useEffect(() => {
-    // If worklet is already initialized, don't do anything
-    if (isWorkletInitialized) {
-      return
-    }
-
-    // Check if worklet is already loading
-    if (isWorkletLoading) {
-      return
-    }
-
-    // Only attempt initialization once per app session
-    if (hasAttemptedWorkletInitialization.current) {
-      return
-    }
-
-    const initializeWorklet = async () => {
-      try {
-        console.log('[WdkAppProvider] Starting worklet initialization...')
-        setInitializationError(null)
-        hasAttemptedWorkletInitialization.current = true
-
-        await startWorklet(networkConfigs)
-        console.log('[WdkAppProvider] Worklet started successfully')
-      } catch (error) {
-        const err = normalizeError(error)
-        console.error('[WdkAppProvider] Failed to initialize worklet:', error)
-        setInitializationError(err)
-        // Don't block the app - allow user to proceed even if initialization fails
-      }
-    }
-
-    initializeWorklet()
-  }, [isWorkletInitialized, isWorkletLoading, networkConfigs, startWorklet])
-
-  // Check if wallet exists when worklet is started (not fully initialized yet)
-  useEffect(() => {
-    if (!isWorkletStarted || hasWalletChecked) {
-      return
-    }
-
-    let cancelled = false
-
-    const checkWallet = async () => {
-      try {
-        console.log('[WdkAppProvider] Checking if wallet exists...')
-        const walletExistsResult = await hasWallet()
-        console.log('[WdkAppProvider] Wallet check result:', walletExistsResult)
-        if (!cancelled) {
-          setHasWalletChecked(true)
-          setWalletExists(walletExistsResult)
-        }
-      } catch (error) {
-        console.error('[WdkAppProvider] Failed to check wallet:', error)
-        if (!cancelled) {
-          setHasWalletChecked(true)
-          setWalletExists(false)
-        }
-      }
-    }
-
-    checkWallet()
-
-    return () => {
-      cancelled = true
-    }
-  }, [isWorkletStarted, hasWalletChecked, hasWallet])
-
-  // Shared wallet initialization logic
-  const performWalletInitialization = useCallback(async () => {
-    try {
-      console.log('[WdkAppProvider] Starting wallet initialization...')
-      setWalletInitError(null)
-
-      // Initialize wallet (create new if doesn't exist, or load existing)
-      if (walletExists) {
-        console.log('[WdkAppProvider] Loading existing wallet from secure storage...')
-        await initializeWallet({ createNew: false })
-        console.log('[WdkAppProvider] Existing wallet loaded successfully')
-      } else {
-        console.log('[WdkAppProvider] Creating new wallet...')
-        await initializeWallet({ createNew: true })
-        console.log('[WdkAppProvider] New wallet created successfully')
-      }
-
-      console.log('[WdkAppProvider] Wallet initialized successfully')
-    } catch (error) {
-      const err = normalizeError(error)
-      console.error('[WdkAppProvider] Failed to initialize wallet:', error)
       
-      setWalletInitError(err)
-      // Store error so UI can display it with retry option
+      // Validate secureStorage has required methods
+      if (!secureStorage || typeof secureStorage !== 'object') {
+        throw new Error('secureStorage must be a SecureStorage instance')
+      }
+      const requiredMethods = ['authenticate', 'hasWallet', 'setEncryptionKey', 'setEncryptedSeed', 'getAllEncrypted']
+      for (const method of requiredMethods) {
+        if (typeof (secureStorage as unknown as Record<string, unknown>)[method] !== 'function') {
+          throw new Error(`secureStorage must have a ${method} method`)
+        }
+      }
+    } catch (error) {
+      const err = normalizeError(error, true, { component: 'WdkAppProvider', operation: 'propsValidation' })
+      logError('[WdkAppProvider] Invalid props:', err)
+      // Always throw validation errors - they indicate programming errors
       throw err
     }
-  }, [walletExists, initializeWallet, secureStorage])
+  }, [networkConfigs, tokenConfigs, balanceRefreshInterval, secureStorage])
 
-  // Initialize wallet when worklet is started, wallet check is complete, and biometric auth is done
-  useEffect(() => {
-    if (!hasWalletChecked || !isWorkletStarted || !biometricAuthenticated) {
-      return
-    }
+  // AbortController hook for managing async operation cancellation
+  const { getController } = useAbortController()
 
-    // Only initialize once per session
-    if (hasAttemptedWalletInitialization.current) {
-      return
-    }
-
-    // Check if wallet is already initializing
-    if (isWalletInitializing) {
-      return
-    }
-
-    const initializeWalletFlow = async () => {
-      hasAttemptedWalletInitialization.current = true
-      await performWalletInitialization()
-    }
-
-    initializeWalletFlow()
-  }, [
-    hasWalletChecked,
+  // WDK initialization hook - handles worklet startup, wallet checking, and initialization
+  const {
     walletExists,
+    isInitializing: isInitializingFromHook,
+    needsBiometric,
+    completeBiometric,
+    error: initializationError,
+    retry,
     isWorkletStarted,
-    isWalletInitializing,
-    biometricAuthenticated,
-    performWalletInitialization,
-  ])
-
-
-  // Handler for completing biometric authentication
-  const completeBiometric = () => {
-    console.log('[WdkAppProvider] Biometric authentication completed')
-    setBiometricAuthenticated(true)
-  }
-
-  // Handler for retrying initialization after an error
-  const retry = useCallback(async () => {
-    console.log('[WdkAppProvider] Retrying initialization...')
-    // Reset error states
-    setWalletInitError(null)
-    setInitializationError(null)
-    // Reset initialization attempt flag so we can try again
-    hasAttemptedWalletInitialization.current = false
-
-    // Retry wallet initialization directly
-    if (!hasWalletChecked || !isWorkletStarted) {
-      console.log('[WdkAppProvider] Cannot retry: prerequisite conditions not met')
-      return
-    }
-
-    try {
-      console.log('[WdkAppProvider] Retrying wallet initialization...')
-      hasAttemptedWalletInitialization.current = true
-      await performWalletInitialization()
-    } catch (error) {
-      // Error is already handled in performWalletInitialization
-      // Just ensure the error state is set (it's already set in performWalletInitialization)
-    }
-  }, [hasWalletChecked, isWorkletStarted, performWalletInitialization])
-
-  // Handler for manually refreshing balances
-  const refreshBalances = useCallback(async () => {
-    if (!walletInitialized || isFetchingBalances) {
-      console.log('[WdkAppProvider] Cannot refresh balances: wallet not ready or already fetching')
-      return
-    }
-
-    try {
-      console.log('[WdkAppProvider] Manually refreshing balances...')
-      setIsFetchingBalances(true)
-      await fetchAllBalances()
-      console.log('[WdkAppProvider] Manual balance refresh completed')
-    } catch (error) {
-      console.error('[WdkAppProvider] Failed to refresh balances:', error)
-    } finally {
-      setIsFetchingBalances(false)
-    }
-  }, [walletInitialized, isFetchingBalances, fetchAllBalances])
+    walletInitialized,
+  } = useWdkInitialization(
+    secureStorage,
+    networkConfigs,
+    requireBiometric,
+    getController()
+  )
 
   // Calculate readiness state
   const isReady = useMemo(() => {
     // If biometric is required and not authenticated, not ready
-    if (requireBiometric && !biometricAuthenticated) {
+    if (requireBiometric && needsBiometric) {
       return false
     }
 
@@ -330,13 +142,8 @@ export function WdkAppProvider({
       return false
     }
 
-    // If we haven't checked wallet existence, not ready
-    if (!hasWalletChecked) {
-      return false
-    }
-
     // If wallet is initializing, not ready
-    if (isWalletInitializing) {
+    if (isInitializingFromHook) {
       return false
     }
 
@@ -345,111 +152,47 @@ export function WdkAppProvider({
       return false
     }
 
-    // If worklet+WDK isn't fully initialized, not ready
-    if (!isWorkletInitialized) {
-      return false
-    }
-
     // All conditions met, ready
     return true
   }, [
     requireBiometric,
-    biometricAuthenticated,
+    needsBiometric,
     isWorkletStarted,
-    isWorkletInitialized,
-    hasWalletChecked,
-    isWalletInitializing,
+    isInitializingFromHook,
     walletExists,
     walletInitialized,
   ])
 
-  // Calculate whether we're waiting for biometric
-  const needsBiometric = useMemo(() => {
-    // Only need biometric if:
-    // 1. Biometric is required
-    // 2. Not authenticated yet
-    // 3. Worklet is started (so we're at the stage where biometric is needed)
-    // 4. Wallet exists (only need biometric to unlock existing wallet)
-    return requireBiometric && !biometricAuthenticated && isWorkletStarted && walletExists === true
-  }, [requireBiometric, biometricAuthenticated, isWorkletStarted, walletExists])
-
-  // Calculate initializing state
-  const isInitializing = useMemo(() => {
-    return isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted)
-  }, [isWorkletLoading, isWalletInitializing, hasWalletChecked, isWorkletStarted])
-
-  // Automatic balance fetching after wallet initialization
-  useEffect(() => {
-    if (!autoFetchBalances || !walletInitialized || !isReady || hasCompletedInitialBalanceFetch.current) {
-      return
-    }
-
-    const fetchBalances = async () => {
-      try {
-        console.log('[WdkAppProvider] Starting automatic balance fetch...')
-        setIsFetchingBalances(true)
-        await fetchAllBalances()
-        console.log('[WdkAppProvider] Automatic balance fetch completed')
-        hasCompletedInitialBalanceFetch.current = true
-      } catch (error) {
-        console.error('[WdkAppProvider] Failed to fetch balances:', error)
-      } finally {
-        setIsFetchingBalances(false)
-      }
-    }
-
-    fetchBalances()
-  }, [autoFetchBalances, walletInitialized, isReady, fetchAllBalances])
-
-  // Auto-refresh balances at specified interval
-  useEffect(() => {
-    if (!autoFetchBalances || !balanceRefreshInterval || balanceRefreshInterval <= 0) {
-      return
-    }
-
-    if (!isReady) {
-      return
-    }
-
-    const interval = setInterval(async () => {
-      // Skip if already fetching to avoid overlapping requests
-      // Check current state to avoid stale closures
-      const workletState = getWorkletStore().getState()
-      if (!workletState.isInitialized) {
-        return
-      }
-      
-      try {
-        console.log('[WdkAppProvider] Auto-refreshing balances...')
-        setIsFetchingBalances(true)
-        await fetchAllBalances()
-        console.log('[WdkAppProvider] Balance auto-refresh completed')
-      } catch (error) {
-        console.error('[WdkAppProvider] Failed to auto-refresh balances:', error)
-      } finally {
-        setIsFetchingBalances(false)
-      }
-    }, balanceRefreshInterval)
-
-    return () => clearInterval(interval)
-  }, [autoFetchBalances, balanceRefreshInterval, isReady, fetchAllBalances])
+  // Balance sync hook - handles automatic and manual balance fetching
+  const {
+    isFetchingBalances,
+    refreshBalances,
+  } = useWdkBalanceSync(
+    tokenConfigs,
+    autoFetchBalances,
+    balanceRefreshInterval,
+    walletInitialized,
+    isReady
+  )
 
   const contextValue: WdkAppContextValue = useMemo(
     () => ({
       isReady,
-      isInitializing,
+      isInitializing: isInitializingFromHook,
       walletExists,
       needsBiometric,
       completeBiometric,
-      error: walletInitError || initializationError,
+      error: initializationError,
       retry,
       isFetchingBalances,
       refreshBalances,
     }),
-    [isReady, isInitializing, walletExists, needsBiometric, walletInitError, initializationError, retry, isFetchingBalances, refreshBalances]
+    [isReady, isInitializingFromHook, walletExists, needsBiometric, completeBiometric, initializationError, retry, isFetchingBalances, refreshBalances]
   )
 
-  return <WdkAppContext.Provider value={contextValue}>{children}</WdkAppContext.Provider>
+  return (
+    <WdkAppContext.Provider value={contextValue}>{children}</WdkAppContext.Provider>
+  )
 }
 
 // Export context for use by the useWdkApp hook

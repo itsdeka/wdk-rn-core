@@ -4,7 +4,8 @@ import { useCallback } from 'react'
 // Local imports
 import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
-import { WorkletService } from '../services/workletService'
+import { AddressService } from '../services/addressService'
+import { BalanceService } from '../services/balanceService'
 import type { WorkletStore } from '../store/workletStore'
 import type { WalletStore } from '../store/walletStore'
 
@@ -67,7 +68,8 @@ export function useWallet() {
   // Get a specific address (from cache or fetch)
   const getAddress = useCallback(
     async (network: string, accountIndex: number = 0) => {
-      return WorkletService.getAddress(network, accountIndex)
+      // Validation is handled by AddressService
+      return AddressService.getAddress(network, accountIndex)
     },
     []
   )
@@ -80,7 +82,7 @@ export function useWallet() {
       methodName: string,
       args?: unknown
     ): Promise<T> => {
-      return WorkletService.callAccountMethod<T>(network, accountIndex, methodName, args)
+      return AddressService.callAccountMethod<T>(network, accountIndex, methodName, args)
     },
     []
   )
@@ -88,55 +90,57 @@ export function useWallet() {
   // Balance management methods
   const updateBalance = useCallback(
     (accountIndex: number, network: string, tokenAddress: string | null, balance: string) => {
-      WorkletService.updateBalance(accountIndex, network, tokenAddress, balance)
+      // Validation should be handled by BalanceService if needed
+      BalanceService.updateBalance(accountIndex, network, tokenAddress, balance)
     },
     []
   )
 
   const getBalance = useCallback(
     (accountIndex: number, network: string, tokenAddress: string | null) => {
-      return WorkletService.getBalance(accountIndex, network, tokenAddress)
+      // No validation needed - service handles it
+      return BalanceService.getBalance(accountIndex, network, tokenAddress)
     },
     []
   )
 
   const getBalancesForWallet = useCallback(
     (accountIndex: number, network: string) => {
-      return WorkletService.getBalancesForWallet(accountIndex, network)
+      return BalanceService.getBalancesForWallet(accountIndex, network)
     },
     []
   )
 
   const setBalanceLoading = useCallback(
     (network: string, accountIndex: number, tokenAddress: string | null, loading: boolean) => {
-      WorkletService.setBalanceLoading(network, accountIndex, tokenAddress, loading)
+      BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, loading)
     },
     []
   )
 
   const isBalanceLoading = useCallback(
     (network: string, accountIndex: number, tokenAddress: string | null) => {
-      return WorkletService.isBalanceLoading(network, accountIndex, tokenAddress)
+      return BalanceService.isBalanceLoading(network, accountIndex, tokenAddress)
     },
     []
   )
 
   const updateLastBalanceUpdate = useCallback(
     (network: string, accountIndex: number) => {
-      WorkletService.updateLastBalanceUpdate(network, accountIndex)
+      BalanceService.updateLastBalanceUpdate(network, accountIndex)
     },
     []
   )
 
   const getLastBalanceUpdate = useCallback(
     (network: string, accountIndex: number) => {
-      return WorkletService.getLastBalanceUpdate(network, accountIndex)
+      return BalanceService.getLastBalanceUpdate(network, accountIndex)
     },
     []
   )
 
   const clearBalances = useCallback(() => {
-    WorkletService.clearBalances()
+    BalanceService.clearBalances()
   }, [])
 
   return {

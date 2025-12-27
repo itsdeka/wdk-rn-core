@@ -1,57 +1,39 @@
 /**
- * Jest setup file
- * Configures test environment and mocks
- * 
- * Note: These mocks are only needed for tests that use React Native modules.
- * Utility tests (validation, errorUtils, balanceUtils) don't require these mocks.
+ * Jest setup file for test configuration
  */
 
 // Mock React Native modules
-jest.mock('react-native', () => ({
-  Platform: {
-    OS: 'ios',
-    select: jest.fn((dict) => dict.ios),
-  },
-}), { virtual: true });
-
-// Mock react-native-mmkv
-jest.mock('react-native-mmkv', () => {
-  const mockMMKVInstance = {
+jest.mock('react-native-mmkv', () => ({
+  MMKV: jest.fn().mockImplementation(() => ({
     set: jest.fn(),
     getString: jest.fn(),
     getNumber: jest.fn(),
     getBoolean: jest.fn(),
     delete: jest.fn(),
     clearAll: jest.fn(),
+    getAllKeys: jest.fn(() => []),
     contains: jest.fn(),
-  }
-  
-  return {
-    createMMKV: jest.fn(() => mockMMKVInstance),
-    MMKV: jest.fn(() => mockMMKVInstance),
-  }
-}, { virtual: true });
-
-// Mock react-native-bare-kit
-jest.mock('react-native-bare-kit', () => ({
-  Worklet: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
-    IPC: {},
   })),
-}), { virtual: true });
+}))
+
+// Mock expo-crypto
+jest.mock('expo-crypto', () => ({
+  digestStringAsync: jest.fn(),
+  getRandomBytesAsync: jest.fn(() => Promise.resolve(new Uint8Array(32))),
+}))
 
 // Mock pear-wrk-wdk
 jest.mock('pear-wrk-wdk', () => ({
-  HRPC: jest.fn().mockImplementation(() => ({
-    workletStart: jest.fn(),
-    initializeWDK: jest.fn(),
-    generateEntropyAndEncrypt: jest.fn(),
-    getMnemonicFromEntropy: jest.fn(),
-    getSeedAndEntropyFromMnemonic: jest.fn(),
-  })),
-  bundle: {},
-}), { virtual: true });
+  Worklet: jest.fn(),
+  createWorklet: jest.fn(),
+}))
 
-// Note: React mock is not needed in setup.ts since it's only required for tests that use zustand stores
-// Those tests will mock React locally to avoid issues with module resolution
+// Mock react-native-bare-kit
+jest.mock('react-native-bare-kit', () => ({
+  createBareKit: jest.fn(),
+}))
 
+// Reset all mocks before each test
+beforeEach(() => {
+  jest.clearAllMocks()
+})

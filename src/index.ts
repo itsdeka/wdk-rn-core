@@ -1,11 +1,11 @@
 /**
- * @tetherto/wdk-rn-worklet
+ * @tetherto/wdk-rn-core
  * 
- * Worklet functionality for React Native wallets
- * Provides worklet store, hooks, and services for wallet operations
+ * Core functionality for React Native wallets
+ * Provides wallet management, balance fetching, and worklet operations
  */
 
-// Types (Network, Token, and Wallet types)
+// Core Types (Network, Token, and Wallet types)
 export type {
   NetworkConfig,
   NetworkConfigs,
@@ -21,44 +21,45 @@ export type {
   TokenHelpers,
 } from './types'
 
-// Storage (for Zustand persistence - non-sensitive data)
-export type { StorageAdapter } from './storage/mmkvStorage'
-export { createMMKVStorage, createMMKVStorageAdapter } from './storage/mmkvStorage'
+// HRPC Type Extensions (for extending HRPC functionality)
+export type { ExtendedHRPC } from './types/hrpc'
+export { isExtendedHRPC, asExtendedHRPC } from './types/hrpc'
 
-// Store
-export { createWorkletStore, getWorkletStore } from './store/workletStore'
-export type {
-  WorkletStore,
-  WorkletState,
-} from './store/workletStore'
-export { createWalletStore, getWalletStore } from './store/walletStore'
-export type {
-  WalletStore,
-  WalletState,
-  WalletLoadingStates,
-} from './store/walletStore'
+// Provider (main entry point)
+export { WdkAppProvider } from './provider/WdkAppProvider'
+export type { WdkAppProviderProps, WdkAppContextValue } from './provider/WdkAppProvider'
 
-// Services
-export { WorkletService } from './services/workletService'
-export { WalletSetupService } from './services/walletSetupService'
-
-// Wallet Utils
-export { createBaseWalletStore } from './utils/walletUtils'
-
-// Hooks
+// Hooks (public API)
 export { useWorklet } from './hooks/useWorklet'
 export { useWallet } from './hooks/useWallet'
 export { useWalletSetup } from './hooks/useWalletSetup'
 export { useWdkApp } from './hooks/useWdkApp'
 export { useBalanceFetcher } from './hooks/useBalanceFetcher'
 
-// Provider
-export { WdkAppProvider } from './provider/WdkAppProvider'
-export type { WdkAppProviderProps, WdkAppContextValue } from './provider/WdkAppProvider'
+// Validation Utilities (for validating configs before use)
+export { 
+  validateNetworkConfigs, 
+  validateTokenConfigs, 
+  validateBalanceRefreshInterval,
+  validateAccountIndex,
+  validateTokenAddress,
+} from './utils/validation'
 
-// Utils
+// Type Guards (for runtime type checking)
+export { 
+  isNetworkConfigs, 
+  isTokenConfigs,
+  isEthereumAddress,
+  isValidAccountIndex,
+  isValidNetworkName,
+} from './utils/typeGuards'
+
+// Utility Functions
 export { validateMnemonic } from './utils/mnemonicUtils'
 export { convertBalanceToString, formatBalance } from './utils/balanceUtils'
 export { normalizeError, getErrorMessage, isErrorType, createContextualError } from './utils/errorUtils'
-export { validateNetworkConfigs, validateTokenConfigs, validateBalanceRefreshInterval } from './utils/validation'
+
+// Result Type (for error handling patterns)
+export type { Result } from './utils/result'
+export { ok, err, toResult, toResultSync } from './utils/result'
 

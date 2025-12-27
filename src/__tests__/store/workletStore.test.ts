@@ -1,90 +1,123 @@
 /**
- * Tests for workletStore persistence
- * 
- * Verifies that sensitive data (encryptionKey, encryptedSeed) is NOT persisted to MMKV,
- * while non-sensitive data (networkConfigs, workletStartResult, wdkInitResult) is persisted.
- * 
- * Note: This test verifies the partialize function behavior by checking the store structure.
- * The actual persistence mechanism is handled by Zustand's persist middleware.
+ * Tests for workletStore
  */
 
-// Mock React before importing zustand stores
-jest.mock('react', () => ({
-  useSyncExternalStore: jest.fn((subscribe, getSnapshot) => getSnapshot()),
-}), { virtual: true })
+import { createWorkletStore, getWorkletStore, resetWorkletStore, clearSensitiveData } from '../../store/workletStore'
 
-import { createWorkletStore } from '../../store/workletStore'
-import type { NetworkConfigs } from '../../types'
-
-describe('workletStore persistence', () => {
-  it('should allow encryptedSeed and encryptionKey in runtime state', () => {
-    const store = createWorkletStore()
-    
-    // Set sensitive data in runtime state
-    store.setState({
-      encryptedSeed: 'test-seed',
-      encryptionKey: 'test-key',
-    })
-    
-    // Verify they exist in runtime state
-    const state = store.getState()
-    expect(state.encryptedSeed).toBe('test-seed')
-    expect(state.encryptionKey).toBe('test-key')
+describe('workletStore', () => {
+  beforeEach(() => {
+    resetWorkletStore()
+    jest.clearAllMocks()
   })
 
-  it('should verify partialize excludes sensitive data', () => {
-    // This test verifies the partialize function logic by examining the store structure
-    // The actual implementation in workletStore.ts should NOT include encryptedSeed or encryptionKey
-    // in the partialize function's return value
-    
-    const store = createWorkletStore()
-    
-    // Set both sensitive and non-sensitive data
-    const networkConfigs: NetworkConfigs = {
-      ethereum: {
-        chainId: 1,
-        blockchain: 'ethereum',
-      },
-    }
-    
-    store.setState({
-      encryptedSeed: 'test-seed',
-      encryptionKey: 'test-key',
-      networkConfigs,
-      workletStartResult: { status: 'success' },
-      wdkInitResult: { status: 'initialized' },
-    })
-    
-    // Verify sensitive data exists in runtime state
-    const state = store.getState()
-    expect(state.encryptedSeed).toBe('test-seed')
-    expect(state.encryptionKey).toBe('test-key')
-    expect(state.networkConfigs).toEqual(networkConfigs)
-    
-    // The partialize function in workletStore.ts should only return:
-    // - networkConfigs
-    // - workletStartResult
-    // - wdkInitResult
-    // And should NOT include encryptedSeed or encryptionKey
-    // This is verified by the implementation, not by testing the persist middleware directly
+  afterEach(() => {
+    resetWorkletStore()
   })
 
-  it('should document that sensitive data is runtime-only', () => {
-    const store = createWorkletStore()
-    
-    // Set sensitive data
-    store.setState({
-      encryptedSeed: 'test-seed',
-      encryptionKey: 'test-key',
+  describe('createWorkletStore', () => {
+    it('should create a worklet store instance', () => {
+      const store = createWorkletStore()
+      expect(store).toBeDefined()
+      expect(typeof store.getState).toBe('function')
     })
-    
-    // These values exist in memory for the current session
-    // but are NOT persisted to MMKV according to the partialize function
-    const state = store.getState()
-    expect(state.encryptedSeed).toBe('test-seed')
-    expect(state.encryptionKey).toBe('test-key')
-    
-    // After app restart, these would be null and need to be loaded from secure storage
+
+    it('should return the same instance on subsequent calls', () => {
+      const store1 = createWorkletStore()
+      const store2 = createWorkletStore()
+      expect(store1).toBe(store2)
+    })
+
+    it('should initialize with default state', () => {
+      const store = createWorkletStore()
+      const state = store.getState()
+      
+      expect(state.worklet).toBe(null)
+      expect(state.hrpc).toBe(null)
+      expect(state.ipc).toBe(null)
+      expect(state.isWorkletStarted).toBe(false)
+      expect(state.isInitialized).toBe(false)
+      expect(state.isLoading).toBe(false)
+      expect(state.error).toBe(null)
+      expect(state.encryptedSeed).toBe(null)
+      expect(state.encryptionKey).toBe(null)
+      expect(state.networkConfigs).toBe(null)
+      expect(state.workletStartResult).toBe(null)
+      expect(state.wdkInitResult).toBe(null)
+    })
+  })
+
+  describe('getWorkletStore', () => {
+    it('should return a worklet store instance', () => {
+      const store = getWorkletStore()
+      expect(store).toBeDefined()
+      expect(typeof store.getState).toBe('function')
+    })
+
+    it('should return the same instance as createWorkletStore', () => {
+      const store1 = createWorkletStore()
+      const store2 = getWorkletStore()
+      expect(store1).toBe(store2)
+    })
+  })
+
+  describe('resetWorkletStore', () => {
+    it('should reset the store instance', () => {
+      const store1 = createWorkletStore()
+      resetWorkletStore()
+      const store2 = createWorkletStore()
+      
+      // After reset, a new instance should be created
+      expect(store1).not.toBe(store2)
+    })
+  })
+
+  describe('clearSensitiveData', () => {
+    it('should clear encrypted seed and encryption key', () => {
+      const store = createWorkletStore()
+      
+      store.setState({
+        encryptedSeed: 'encrypted-seed',
+        encryptionKey: 'encryption-key',
+      })
+
+      clearSensitiveData()
+
+      const state = store.getState()
+      expect(state.encryptedSeed).toBe(null)
+      expect(state.encryptionKey).toBe(null)
+    })
+
+    it('should not affect other state', () => {
+      const store = createWorkletStore()
+      
+      store.setState({
+        isWorkletStarted: true,
+        encryptedSeed: 'encrypted-seed',
+        encryptionKey: 'encryption-key',
+      })
+
+      clearSensitiveData()
+
+      const state = store.getState()
+      expect(state.isWorkletStarted).toBe(true)
+      expect(state.encryptedSeed).toBe(null)
+      expect(state.encryptionKey).toBe(null)
+    })
+  })
+
+  describe('store state management', () => {
+    it('should allow state updates', () => {
+      const store = createWorkletStore()
+      
+      store.setState({
+        isWorkletStarted: true,
+        isLoading: true,
+      })
+
+      const state = store.getState()
+      expect(state.isWorkletStarted).toBe(true)
+      expect(state.isLoading).toBe(true)
+    })
   })
 })
 

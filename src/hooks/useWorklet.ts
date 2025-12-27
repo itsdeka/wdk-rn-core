@@ -1,6 +1,6 @@
 // Local imports
 import { getWorkletStore } from '../store/workletStore'
-import { WorkletService } from '../services/workletService'
+import { WorkletLifecycleService } from '../services/workletLifecycleService'
 import type { WorkletStore } from '../store/workletStore'
 
 /**
@@ -42,16 +42,16 @@ export function useWorklet() {
   const encryptionKey = store((state: WorkletStore) => state.encryptionKey)
   const networkConfigs = store((state: WorkletStore) => state.networkConfigs)
 
-  // Actions are provided by WorkletService (static methods, no memoization needed)
+  // Actions are provided by WorkletLifecycleService (static methods, no memoization needed)
   const actions = {
-    startWorklet: WorkletService.startWorklet,
-    initializeWDK: WorkletService.initializeWDK,
-    generateEntropyAndEncrypt: WorkletService.generateEntropyAndEncrypt,
-    getMnemonicFromEntropy: WorkletService.getMnemonicFromEntropy,
-    getSeedAndEntropyFromMnemonic: WorkletService.getSeedAndEntropyFromMnemonic,
-    initializeWorklet: WorkletService.initializeWorklet,
-    reset: WorkletService.reset,
-    clearError: WorkletService.clearError,
+    startWorklet: WorkletLifecycleService.startWorklet,
+    initializeWDK: WorkletLifecycleService.initializeWDK,
+    generateEntropyAndEncrypt: WorkletLifecycleService.generateEntropyAndEncrypt,
+    getMnemonicFromEntropy: WorkletLifecycleService.getMnemonicFromEntropy,
+    getSeedAndEntropyFromMnemonic: WorkletLifecycleService.getSeedAndEntropyFromMnemonic,
+    initializeWorklet: WorkletLifecycleService.initializeWorklet,
+    reset: WorkletLifecycleService.reset,
+    clearError: WorkletLifecycleService.clearError,
   }
 
   return {

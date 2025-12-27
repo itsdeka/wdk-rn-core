@@ -16,8 +16,17 @@
  * ```
  */
 export function validateMnemonic(mnemonic: string): boolean {
-  const words = mnemonic.trim().split(/\s+/)
+  const trimmed = mnemonic.trim()
+  
+  // Normalize whitespace first (multiple spaces become single spaces)
+  // This handles cases like "word1  word2" where multiple spaces should be normalized
+  const normalized = trimmed.replace(/\s+/g, ' ')
+  
+  // Split and validate
+  const words = normalized.split(' ')
   const validLengths = [12, 24]
+  
+  // Check word count and that all words are non-empty
   return validLengths.includes(words.length) && words.every(word => word.length > 0)
 }
 
