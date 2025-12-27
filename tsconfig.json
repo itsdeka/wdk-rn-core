@@ -18,6 +18,8 @@
     "paths": {
       "@tetherto/wdk-rn-secure-storage": ["../wdk-rn-secure-storage/src"]
     },
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "sourceMap": true
   },
   "include": ["src/**/*"],
