@@ -4,14 +4,17 @@
   "description": "Core functionality for React Native wallets - wallet management, balance fetching, and worklet operations",
   "main": "./dist/wdk-rn-core/src/index.js",
   "types": "./dist/wdk-rn-core/src/index.d.ts",
+  "react-native": "./src/index.ts",
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
   "exports": {
     ".": {
       "types": "./dist/wdk-rn-core/src/index.d.ts",
+      "react-native": "./src/index.ts",
       "default": "./dist/wdk-rn-core/src/index.js"
     }
   },
