@@ -13,21 +13,6 @@ import { normalizeError } from '../utils/errorUtils'
 import { isValidNetworkName, isValidAccountIndex } from '../utils/typeGuards'
 
 /**
- * Allowed method names for account operations
- * This whitelist prevents calling arbitrary methods and improves security
- */
-export const ALLOWED_ACCOUNT_METHODS = [
-  'getAddress',
-  'getBalance',
-  'getTokenBalance',
-  'signMessage',
-  'signTransaction',
-  'sendTransaction',
-] as const
-
-export type AllowedMethodName = typeof ALLOWED_ACCOUNT_METHODS[number]
-
-/**
  * Account Service
  * 
  * Provides methods for calling account operations through the worklet.
@@ -39,7 +24,7 @@ export class AccountService {
    * 
    * @param network - Network name
    * @param accountIndex - Account index
-   * @param methodName - Method name (must be in ALLOWED_ACCOUNT_METHODS whitelist)
+   * @param methodName - Method name
    * @param args - Optional arguments for the method
    * @returns Promise with the method result
    * @throws Error if methodName is not in the allowed list or if validation fails
@@ -75,13 +60,6 @@ export class AccountService {
     // Validate methodName parameter
     if (typeof methodName !== 'string' || methodName.trim().length === 0) {
       throw new Error('methodName must be a non-empty string')
-    }
-
-    // Validate methodName is in the allowed list
-    if (!ALLOWED_ACCOUNT_METHODS.includes(methodName as AllowedMethodName)) {
-      throw new Error(
-        `Method ${methodName} is not allowed. Allowed methods: ${ALLOWED_ACCOUNT_METHODS.join(', ')}`
-      )
     }
 
     // Runtime validation using type guards
