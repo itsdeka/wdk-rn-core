@@ -2,8 +2,8 @@
   "name": "@tetherto/wdk-rn-core",
   "version": "1.0.0",
   "description": "Core functionality for React Native wallets - wallet management, balance fetching, and worklet operations",
-  "main": "./dist/wdk-rn-core/src/index.js",
-  "types": "./dist/wdk-rn-core/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "react-native": "./src/index.ts",
   "files": [
     "dist",
@@ -13,9 +13,9 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/wdk-rn-core/src/index.d.ts",
+      "types": "./dist/index.d.ts",
       "react-native": "./src/index.ts",
-      "default": "./dist/wdk-rn-core/src/index.js"
+      "default": "./dist/index.js"
     }
   },
   "repository": {
