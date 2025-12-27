@@ -216,12 +216,12 @@ export function useWdkInitialization(
 
   // Initialize wallet when worklet is started, wallet check is complete, and biometric auth is done
   useEffect(() => {
-    // Don't initialize if wallet is already initialized
-    if (walletInitialized) {
+    if (!hasWalletChecked || !isWorkletStarted || !biometricAuthenticated) {
       return
     }
 
-    if (!hasWalletChecked || !isWorkletStarted || !biometricAuthenticated) {
+    // Don't initialize if wallet is already initialized
+    if (walletInitialized) {
       return
     }
 
@@ -239,12 +239,6 @@ export function useWdkInitialization(
 
     const initializeWalletFlow = async () => {
       if (abortController?.signal.aborted || !isMountedRef.current) {
-        return
-      }
-
-      // Check again if wallet is already initialized (might have been initialized by another operation)
-      if (walletInitialized) {
-        hasAttemptedWalletInitialization.current = false
         return
       }
 
