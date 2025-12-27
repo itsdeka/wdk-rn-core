@@ -10,7 +10,7 @@ import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
 import { logError } from '../utils/logger'
 import { normalizeError } from '../utils/errorUtils'
-import { isValidNetworkName, isValidAccountIndex, isEthereumAddress } from '../utils/typeGuards'
+import { isValidNetworkName, isValidAccountIndex, isValidAddress } from '../utils/typeGuards'
 
 /**
  * Allowed method names for account operations
@@ -57,7 +57,7 @@ export class AddressService {
     const cachedAddress = walletState.addresses[network]?.[accountIndex]
     if (cachedAddress) {
       // Validate cached address format
-      if (!isEthereumAddress(cachedAddress)) {
+      if (!isValidAddress(cachedAddress)) {
         throw new Error(`Cached address for ${network}:${accountIndex} has invalid format`)
       }
       return cachedAddress
@@ -99,7 +99,7 @@ export class AddressService {
           throw new Error('Address must be a string')
         }
         // Runtime validation of address format
-        if (!isEthereumAddress(parsed)) {
+        if (!isValidAddress(parsed)) {
           throw new Error(`Address from worklet has invalid format: ${parsed}`)
         }
         address = parsed

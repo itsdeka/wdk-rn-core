@@ -197,8 +197,8 @@ export function isWalletAddresses(value: unknown): value is WalletAddresses {
         return false
       }
 
-      // Basic Ethereum address format check
-      if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      // Basic address format check (Ethereum or Spark)
+      if (!isValidAddress(address)) {
         return false
       }
     }
@@ -265,6 +265,27 @@ export function isWalletBalances(value: unknown): value is WalletBalances {
  */
 export function isEthereumAddress(value: unknown): value is string {
   return typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value)
+}
+
+/**
+ * Type guard to check if a value is a valid Spark address (Bech32 format)
+ * Spark addresses start with "spark1" followed by Bech32-encoded characters
+ */
+export function isSparkAddress(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false
+  }
+  // Spark addresses use Bech32 encoding: spark1 followed by base32 characters
+  // Bech32 uses: qpzry9x8gf2tvdw0s3jn54khce6mua7l (lowercase alphanumeric excluding 1, b, i, o)
+  // For validation, we'll accept spark1 followed by lowercase alphanumeric characters
+  return /^spark1[a-z0-9]+$/.test(value) && value.length >= 14 && value.length <= 90
+}
+
+/**
+ * Type guard to check if a value is a valid address (Ethereum or Spark format)
+ */
+export function isValidAddress(value: unknown): value is string {
+  return isEthereumAddress(value) || isSparkAddress(value)
 }
 
 /**

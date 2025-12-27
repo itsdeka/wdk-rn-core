@@ -63,3 +63,12 @@ export { normalizeError, getErrorMessage, isErrorType, createContextualError } f
 export type { Result } from './utils/result'
 export { ok, err, toResult, toResultSync } from './utils/result'
 
+// Store Access (for advanced use cases)
+export { getWalletStore } from './store/walletStore'
+export { getWorkletStore } from './store/workletStore'
+
+// Services (for advanced use cases)
+export { WorkletLifecycleService } from './services/workletLifecycleService'
+export { AddressService } from './services/addressService'
+export { BalanceService } from './services/balanceService'
+
