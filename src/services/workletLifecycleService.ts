@@ -455,5 +455,14 @@ export class WorkletLifecycleService {
     const store = getWorkletStore()
     store.setState({ error: null })
   }
+
+  /**
+   * Check if wallet is initialized
+   * Returns true if worklet is started and WDK is initialized
+   */
+  static isInitialized(): boolean {
+    const store = getWorkletStore()
+    return store.getState().isInitialized
+  }
 }
 

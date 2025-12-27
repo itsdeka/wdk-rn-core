@@ -54,6 +54,12 @@ export {
   isValidNetworkName,
 } from './utils/typeGuards'
 
+// Services
+export { WorkletLifecycleService } from './services/workletLifecycleService'
+export { AddressService } from './services/addressService'
+export { BalanceService } from './services/balanceService'
+export { WalletSetupService } from './services/walletSetupService'
+
 // Utility Functions
 export { validateMnemonic } from './utils/mnemonicUtils'
 export { convertBalanceToString, formatBalance } from './utils/balanceUtils'
@@ -62,15 +68,4 @@ export { normalizeError, getErrorMessage, isErrorType, createContextualError } f
 // Result Type (for error handling patterns)
 export type { Result } from './utils/result'
 export { ok, err, toResult, toResultSync } from './utils/result'
-
-// Store Access (for advanced use cases)
-export { getWalletStore } from './store/walletStore'
-export { getWorkletStore } from './store/workletStore'
-
-// Services (for advanced use cases)
-export { WorkletLifecycleService } from './services/workletLifecycleService'
-export { AddressService } from './services/addressService'
-export { AccountService, ALLOWED_ACCOUNT_METHODS } from './services/accountService'
-export type { AllowedMethodName } from './services/accountService'
-export { BalanceService } from './services/balanceService'
 
