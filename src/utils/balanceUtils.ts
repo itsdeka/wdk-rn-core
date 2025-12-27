@@ -39,6 +39,14 @@ export function formatBalance(balance: string | null, decimals: number): string 
   if (!balance || balance === '0' || balance === 'null') {
     return '0'
   }
+  
+  // Validate that balance is a valid numeric string before attempting BigInt conversion
+  // BigInt accepts: digits only, or digits with optional leading minus sign
+  if (!/^-?\d+$/.test(balance.trim())) {
+    // Invalid format - return as-is (for backwards compatibility with test expectations)
+    return balance
+  }
+  
   try {
     const balanceBigInt = BigInt(balance)
     const divisor = BigInt(10 ** decimals)
