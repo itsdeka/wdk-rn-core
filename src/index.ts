@@ -19,6 +19,7 @@ export type {
   BalanceFetchResult,
   TokenConfigProvider,
   TokenHelpers,
+  WalletStore,
 } from './types'
 
 // HRPC Type Extensions (for extending HRPC functionality)

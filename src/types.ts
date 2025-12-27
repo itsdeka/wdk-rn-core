@@ -1,284 +1,172 @@
 /**
- * All Types
+ * Core Type Definitions
  * 
- * Network, token, and wallet type definitions.
+ * All network, token, and wallet type definitions for the WDK React Native Core library.
  */
-
-import type { WorkletStore } from './store/workletStore'
 
 /**
- * Network configuration types
+ * Network Configuration
+ * 
+ * Defines the configuration for a blockchain network.
  */
-
 export interface NetworkConfig {
+  /** Chain ID for the network */
   chainId: number
+  /** Blockchain name (e.g., "ethereum", "polygon") */
   blockchain: string
+  /** Optional RPC provider URL */
   provider?: string
+  /** Optional bundler URL for account abstraction */
   bundlerUrl?: string
+  /** Optional paymaster URL for account abstraction */
   paymasterUrl?: string
+  /** Optional paymaster contract address */
   paymasterAddress?: string
+  /** Optional entry point contract address */
   entryPointAddress?: string
-  safeModulesVersion?: string
-  paymasterToken?: {
-    address: string
-  }
+  /** Optional maximum fee for transfers */
   transferMaxFee?: number
-  network?: string // For Spark network type (MAINNET, TESTNET)
 }
 
+/**
+ * Network Configurations
+ * 
+ * Maps network names to their configurations.
+ */
 export type NetworkConfigs = Record<string, NetworkConfig>
 
 /**
- * Token configuration types
+ * Token Configuration
+ * 
+ * Defines the configuration for a token (native or ERC20).
  */
-
 export interface TokenConfig {
-  // Token address (null for native token)
-  address: string | null
-  // Token symbol (e.g., 'ETH', 'USDT')
+  /** Token symbol (e.g., "ETH", "USDT") */
   symbol: string
-  // Token name (e.g., 'Ethereum', 'Tether USD')
+  /** Token name (e.g., "Ethereum", "Tether") */
   name: string
-  // Token decimals (18 for most tokens, 6 for USDT)
+  /** Number of decimals (0-18) */
   decimals: number
-  // Optional: Token logo URI
-  logoURI?: string
-  // Optional: Coingecko ID for price fetching
-  coingeckoId?: string
+  /** Token contract address (null for native tokens) */
+  address: string | null
 }
 
+/**
+ * Network Tokens
+ * 
+ * Defines the tokens available for a network (native + ERC20 tokens).
+ */
 export interface NetworkTokens {
-  // Native token (always present)
+  /** Native token configuration */
   native: TokenConfig
-  // ERC20 tokens supported on this network
+  /** Array of ERC20 token configurations */
   tokens: TokenConfig[]
 }
 
+/**
+ * Token Configurations
+ * 
+ * Maps network names to their token configurations.
+ */
 export type TokenConfigs = Record<string, NetworkTokens>
 
 /**
- * Wallet Types
+ * Wallet
  * 
- * Defines types and interfaces that wallet stores should implement.
- * 
- * IMPORTANT: These are TYPE definitions only - they do NOT store data.
- * - store/walletStore.ts: Actual storage of addresses and balances (the source of truth)
- * - utils/walletUtils.ts: Helper functions for working with wallets
- * - rumbleStore.ts, etc.: App-specific stores that implement the WalletStore interface
- */
-
-/**
- * Wallet address data structure
- * Maps network -> accountIndex -> address
- * Used to store addresses for all wallets across all networks
- */
-export interface WalletAddresses {
-  [network: string]: {
-    [accountIndex: number]: string
-  }
-}
-
-/**
- * Balance data structure
- * Maps network -> accountIndex -> tokenAddress (null for native) -> balance (as string to handle big numbers)
- * 
- * This is the standard structure for storing balances across all wallet apps.
- * Apps can extend this but should maintain compatibility with this structure.
- */
-export interface WalletBalances {
-  [network: string]: {
-    [accountIndex: number]: {
-      [tokenAddress: string | 'native']: string // Balance as string to handle big numbers
-    }
-  }
-}
-
-/**
- * Balance loading states
- * Maps "network-accountIndex-tokenAddress" -> boolean
- * 
- * Used to track which balances are currently being fetched.
- */
-export interface BalanceLoadingStates {
-  [key: string]: boolean
-}
-
-/**
- * Base Wallet Interface
- * 
- * Common wallet structure for all wallet apps.
- * Apps can extend this interface to add app-specific fields.
+ * Represents a wallet instance with metadata.
  */
 export interface Wallet {
-  /**
-   * Account index (0 for main wallet, >0 for additional wallets)
-   */
+  /** Account index (0-based) */
   accountIndex: number
-
-  /**
-   * Unique identifier for the wallet (e.g., username, channel ID, etc.)
-   * This is app-specific but required for all wallets
-   */
+  /** Unique wallet identifier */
   identifier: string
-
-  /**
-   * Display name for the wallet
-   */
+  /** Wallet display name */
   name: string
-
-  /**
-   * Addresses per chain (network -> address)
-   * Maps network name to wallet address on that network
-   * 
-   * NOTE: Addresses are stored ONLY in walletStore (the source of truth).
-   * This field is optional - stores can retrieve addresses from walletStore on-the-fly
-   * rather than storing them separately to avoid duplication and sync issues.
-   * 
-   * The walletStore stores addresses as: { [network]: { [accountIndex]: address } }
-   * This field is the flattened view: { [network]: address } for a specific wallet.
-   */
-  addresses?: Record<string, string>
-
-  /**
-   * Timestamp when wallet was created (milliseconds since epoch)
-   */
+  /** Timestamp when wallet was created */
   createdAt: number
-
-  /**
-   * Timestamp when wallet was last updated (milliseconds since epoch)
-   */
+  /** Timestamp when wallet was last updated */
   updatedAt: number
+}
 
-  /**
-   * Balances per network and token
-   * Maps network name to token balances (tokenAddress -> balance)
-   * tokenAddress is null for native tokens, use 'native' as key
-   * Balance is stored as string to handle big numbers
-   * 
-   * NOTE: Balances are stored ONLY in walletStore (the source of truth).
-   * This field is optional - stores can retrieve balances from walletStore on-the-fly
-   * rather than storing them separately to avoid duplication and sync issues.
-   * 
-   * The walletStore stores balances as: { [network]: { [accountIndex]: { [tokenAddress]: balance } } }
-   * This field is the flattened view: { [network]: { [tokenAddress]: balance } } for a specific wallet.
-   */
-  balances?: Record<string, Record<string, string>>
+/**
+ * Wallet Addresses
+ * 
+ * Maps network -> accountIndex -> address
+ * Structure: { [network]: { [accountIndex]: address } }
+ */
+export type WalletAddresses = Record<string, Record<number, string>>
 
-  /**
-   * Last balance update timestamp per network
-   * Maps network name to timestamp (milliseconds since epoch)
-   * Used to track when balances were last fetched for each network
-   * 
-   * NOTE: This is stored in walletStore. This field is optional and computed from walletStore.
-   */
-  lastBalanceUpdate?: Record<string, number>
+/**
+ * Wallet Balances
+ * 
+ * Maps network -> accountIndex -> tokenAddress -> balance
+ * Structure: { [network]: { [accountIndex]: { [tokenAddress]: balance } } }
+ * Note: balance is stored as a string to handle BigInt values
+ */
+export type WalletBalances = Record<string, Record<number, Record<string, string>>>
 
-  /**
-   * Balance loading states per network and token
-   * Maps "network-tokenAddress" to loading state (true = loading, false/undefined = not loading)
-   * Used to track which balances are currently being fetched
-   * Note: tokenAddress is null for native tokens, use 'native' as key
-   * 
-   * NOTE: This is stored in walletStore. This field is optional and computed from walletStore.
-   */
-  balanceLoading?: Record<string, boolean>
+/**
+ * Balance Loading States
+ * 
+ * Maps "network-accountIndex-tokenAddress" -> boolean
+ * Used to track which balances are currently being fetched.
+ */
+export type BalanceLoadingStates = Record<string, boolean>
+
+/**
+ * Balance Fetch Result
+ * 
+ * Result of a balance fetch operation.
+ */
+export interface BalanceFetchResult {
+  /** Whether the fetch was successful */
+  success: boolean
+  /** Network name */
+  network: string
+  /** Account index */
+  accountIndex: number
+  /** Token address (null for native tokens) */
+  tokenAddress: string | null
+  /** Balance as a string (null if fetch failed) */
+  balance: string | null
+  /** Error message (only present if success is false) */
+  error?: string
+}
+
+/**
+ * Token Config Provider
+ * 
+ * Either a TokenConfigs object or a function that returns TokenConfigs.
+ * Allows for dynamic token configuration.
+ */
+export type TokenConfigProvider = TokenConfigs | (() => TokenConfigs)
+
+/**
+ * Token Helpers
+ * 
+ * Helper functions for working with token configurations.
+ */
+export interface TokenHelpers {
+  /** Get all tokens (native + ERC20) for a network */
+  getTokensForNetwork: (network: string) => TokenConfig[]
+  /** Get all supported network names */
+  getSupportedNetworks: () => string[]
 }
 
 /**
  * Wallet Store Interface
- *
- * Defines the interface that wallet stores should implement.
- * This allows wdk-rn-balance-fetcher to work with any store that implements this interface.
- *
- * Stores that implement this interface can be used with:
- * - Balance fetching (wdk-rn-balance-fetcher)
- * - Wallet management utilities
- *
- * NOTE: Balance management is worklet-level, not store-level.
- * Use BalanceService or useWallet hook for balance operations.
- *
- * Apps can extend this interface with app-specific methods.
+ * 
+ * Interface for wallet store implementations that provide account methods
+ * and wallet initialization status.
  */
 export interface WalletStore {
-  /**
-   * Get all wallets managed by this store
-   */
-  getAllWallets: () => Wallet[]
-
-  /**
-   * Call a method on a wallet account (worklet operation)
-   * This allows balance fetching and other operations to interact with the worklet
-   *
-   * @param network - Network name (e.g., 'ethereum')
-   * @param accountIndex - Account index
-   * @param methodName - Method name to call (e.g., 'getBalance', 'getTokenBalance')
-   * @param args - Optional arguments for the method
-   * @returns Promise with the method result
-   */
+  /** Call a method on a wallet account */
   callAccountMethod: <T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
     args?: unknown
   ) => Promise<T>
-
-  /**
-   * Check if the wallet is initialized (worklet is ready)
-   */
+  /** Check if the wallet is initialized */
   isWalletInitialized: () => boolean
-
-  /**
-   * Get a wallet by account index
-   */
-  getWallet?: (accountIndex: number) => Wallet | null
-
-  /**
-   * Update wallet address for a specific network
-   */
-  updateWalletAddress?: (accountIndex: number, network: string, address: string) => void
-
-  /**
-   * Index signature for compatibility with Record<string, unknown>
-   * Note: This is intentionally broad to allow app-specific extensions.
-   * Apps should extend this interface with specific methods rather than using the index signature.
-   */
-  [key: string]: unknown
-}
-
-/**
- * Balance Fetching Types
- */
-
-/**
- * Balance fetch result
- */
-export interface BalanceFetchResult {
-  success: boolean
-  network: string
-  accountIndex: number
-  tokenAddress: string | null
-  balance: string | null
-  error?: string
-}
-
-/**
- * Token config provider
- * Apps can provide token configs directly or through a function
- */
-export type TokenConfigProvider = TokenConfigs | (() => TokenConfigs)
-
-/**
- * Token helper functions
- * Apps can provide custom implementations or use the default
- */
-export interface TokenHelpers {
-  /**
-   * Get all tokens for a specific network (native + ERC20)
-   */
-  getTokensForNetwork: (network: string) => TokenConfig[]
-
-  /**
-   * Get all supported networks
-   */
-  getSupportedNetworks: () => string[]
 }
