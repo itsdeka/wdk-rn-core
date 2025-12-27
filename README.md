@@ -174,6 +174,120 @@ function WalletApp() {
 }
 ```
 
+### Using Account Methods
+
+The `useWallet` hook provides `callAccountMethod` to call account methods like `getBalance`, `getTokenBalance`, `signMessage`, `signTransaction`, etc.
+
+```typescript
+import { useWallet } from '@tetherto/wdk-rn-core';
+
+function AccountOperations() {
+  const { callAccountMethod, isInitialized } = useWallet();
+
+  // Get native token balance
+  const handleGetBalance = async () => {
+    try {
+      const balance = await callAccountMethod(
+        'ethereum',
+        0,
+        'getBalance',
+        null
+      );
+      console.log('Balance:', balance);
+    } catch (error) {
+      console.error('Failed to get balance:', error);
+    }
+  };
+
+  // Get ERC20 token balance
+  const handleGetTokenBalance = async (tokenAddress: string) => {
+    try {
+      const balance = await callAccountMethod(
+        'ethereum',
+        0,
+        'getTokenBalance',
+        tokenAddress
+      );
+      console.log('Token balance:', balance);
+    } catch (error) {
+      console.error('Failed to get token balance:', error);
+    }
+  };
+
+  // Sign a message
+  const handleSignMessage = async (message: string) => {
+    try {
+      const signature = await callAccountMethod(
+        'ethereum',
+        0,
+        'signMessage',
+        { message }
+      );
+      console.log('Signature:', signature);
+    } catch (error) {
+      console.error('Failed to sign message:', error);
+    }
+  };
+
+  // Sign a transaction
+  const handleSignTransaction = async (transaction: any) => {
+    try {
+      const signedTx = await callAccountMethod(
+        'ethereum',
+        0,
+        'signTransaction',
+        transaction
+      );
+      console.log('Signed transaction:', signedTx);
+    } catch (error) {
+      console.error('Failed to sign transaction:', error);
+    }
+  };
+
+  // Send a transaction
+  const handleSendTransaction = async (transaction: any) => {
+    try {
+      const txHash = await callAccountMethod(
+        'ethereum',
+        0,
+        'sendTransaction',
+        transaction
+      );
+      console.log('Transaction hash:', txHash);
+    } catch (error) {
+      console.error('Failed to send transaction:', error);
+    }
+  };
+
+  if (!isInitialized) {
+    return <Text>Wallet not initialized</Text>;
+  }
+
+  return (
+    <View>
+      <Button onPress={handleGetBalance}>Get Balance</Button>
+      <Button onPress={() => handleGetTokenBalance('0x...')}>
+        Get Token Balance
+      </Button>
+      <Button onPress={() => handleSignMessage('Hello World')}>
+        Sign Message
+      </Button>
+      {/* More buttons... */}
+    </View>
+  );
+}
+```
+
+**Available Account Methods:**
+- `getAddress` - Get wallet address for a network
+- `getBalance` - Get native token balance
+- `getTokenBalance` - Get ERC20 token balance
+- `signMessage` - Sign a message
+- `signTransaction` - Sign a transaction
+- `sendTransaction` - Send a transaction
+
+**Note:** All methods are validated against a whitelist for security. Only the methods listed above are allowed. Use `useWallet().callAccountMethod()` to call these methods.
+
 ## Features
 
 - 💼 Wallet management (create, import, delete)
@@ -205,6 +319,7 @@ The module follows a layered architecture:
 │      Service Layer                    │
 │  WorkletLifecycleService              │
 │  AddressService                       │
+│  AccountService                       │
 │  BalanceService                       │
 │  WalletSetupService                   │
 └──────────────┬──────────────────────┘
@@ -227,13 +342,9 @@ The module uses focused services following the Single Responsibility Principle:
 
 - **WorkletLifecycleService**: Manages worklet lifecycle (start, initialize, cleanup)
 - **AddressService**: Handles address retrieval and caching
+- **AccountService**: Handles account method calls (getBalance, getTokenBalance, signMessage, signTransaction, etc.)
 - **BalanceService**: Manages balance operations (get, set, update)
 - **WalletSetupService**: Handles wallet creation and initialization
-
-The module uses focused services following the Single Responsibility Principle:
-- `WorkletLifecycleService` for lifecycle operations (start, initialize, cleanup)
-- `AddressService` for address operations (getAddress, callAccountMethod)
-- `BalanceService` for balance operations (getBalance, updateBalance, etc.)
 
 ## API
 

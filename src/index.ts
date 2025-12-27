@@ -70,5 +70,7 @@ export { getWorkletStore } from './store/workletStore'
 // Services (for advanced use cases)
 export { WorkletLifecycleService } from './services/workletLifecycleService'
 export { AddressService } from './services/addressService'
+export { AccountService, ALLOWED_ACCOUNT_METHODS } from './services/accountService'
+export type { AllowedMethodName } from './services/accountService'
 export { BalanceService } from './services/balanceService'
 

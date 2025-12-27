@@ -25,6 +25,7 @@ import type {
   TokenHelpers,
 } from '../types'
 import { AddressService } from '../services/addressService'
+import { AccountService } from '../services/accountService'
 import { BalanceService } from '../services/balanceService'
 
 // Local imports
@@ -177,7 +178,7 @@ export function useBalanceFetcher(options: {
       try {
         log(`[BalanceFetcher] Calling getBalance for ${network}:${accountIndex}...`)
         // Call getBalance method on the account for native token
-        const balanceResult = await AddressService.callAccountMethod<unknown>(
+        const balanceResult = await AccountService.callAccountMethod<unknown>(
           network,
           accountIndex,
           'getBalance',
@@ -246,7 +247,7 @@ export function useBalanceFetcher(options: {
 
       try {
         // Call getTokenBalance method on the account for ERC20 token
-        const balanceResult = await AddressService.callAccountMethod<unknown>(
+        const balanceResult = await AccountService.callAccountMethod<unknown>(
           network,
           accountIndex,
           'getTokenBalance',

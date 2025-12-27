@@ -5,6 +5,7 @@ import { useCallback } from 'react'
 import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
 import { AddressService } from '../services/addressService'
+import { AccountService } from '../services/accountService'
 import { BalanceService } from '../services/balanceService'
 import type { WorkletStore } from '../store/workletStore'
 import type { WalletStore } from '../store/walletStore'
@@ -25,6 +26,7 @@ import type { WalletStore } from '../store/walletStore'
  *   balances,
  *   getAddress, 
  *   getBalance,
+ *   callAccountMethod,
  *   isLoadingAddress,
  *   isInitialized
  * } = useWallet()
@@ -33,6 +35,9 @@ import type { WalletStore } from '../store/walletStore'
  *   if (isInitialized) {
  *     getAddress('ethereum', 0).then(console.log)
  *     const balance = getBalance(0, 'ethereum', null)
+ *     // Call account methods
+ *     callAccountMethod('ethereum', 0, 'signMessage', { message: 'Hello' })
+ *       .then(console.log)
  *   }
  * }, [isInitialized])
  * ```
@@ -82,7 +87,7 @@ export function useWallet() {
       methodName: string,
       args?: unknown
     ): Promise<T> => {
-      return AddressService.callAccountMethod<T>(network, accountIndex, methodName, args)
+      return AccountService.callAccountMethod<T>(network, accountIndex, methodName, args)
     },
     []
   )
