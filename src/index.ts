@@ -58,6 +58,7 @@ export {
 // Services
 export { WorkletLifecycleService } from './services/workletLifecycleService'
 export { AddressService } from './services/addressService'
+export { AccountService } from './services/accountService'
 export { BalanceService } from './services/balanceService'
 export { WalletSetupService } from './services/walletSetupService'
 
