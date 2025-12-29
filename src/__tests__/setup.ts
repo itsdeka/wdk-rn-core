@@ -36,4 +36,9 @@ jest.mock('react-native-bare-kit', () => ({
 // Reset all mocks before each test
 beforeEach(() => {
   jest.clearAllMocks()
+  // Clear mock secure storage between tests
+  const { mockSecureStorage } = require('../__mocks__/secureStorage')
+  if (typeof mockSecureStorage._clearStorage === 'function') {
+    mockSecureStorage._clearStorage()
+  }
 })
