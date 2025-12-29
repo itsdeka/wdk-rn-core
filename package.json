@@ -49,7 +49,7 @@
   "dependencies": {
     "@tetherto/wdk-rn-secure-storage": "github:itsdeka/wdk-rn-secure-storage#b291ff8cf4542676159c99965ea4a0fa6706b493",
     "expo-crypto": "^15.0.8",
-    "pear-wrk-wdk": "github:itsdeka/pear-wrk-wdk#3047dc2cef57fcb970da7f7f647dad3010909428",
+    "pear-wrk-wdk": "github:itsdeka/pear-wrk-wdk#e81fbe63d3e671697fe2e7e577553a57406638d8",
     "react-native-bare-kit": "^0.11.0",
     "react-native-mmkv": "^4.1.0",
     "zustand": "^5.0.9"
