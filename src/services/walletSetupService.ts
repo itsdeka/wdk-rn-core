@@ -28,6 +28,52 @@ export class WalletSetupService {
   private static credentialsCache = new Map<string, CachedCredentials>()
 
   /**
+   * SecureStorage singleton instance
+   * Set by WdkAppProvider during initialization
+   */
+  private static secureStorageInstance: SecureStorage | null = null
+
+  /**
+   * Set the secureStorage singleton instance
+   * Called by WdkAppProvider during initialization
+   * Also exposed publicly for testing purposes
+   * 
+   * @param secureStorage - SecureStorage instance to use
+   * @param allowOverwrite - If false, warns when overwriting existing instance (default: true)
+   */
+  static setSecureStorage(secureStorage: SecureStorage, allowOverwrite: boolean = true): void {
+    if (this.secureStorageInstance && !allowOverwrite) {
+      log('⚠️ SecureStorage already set. This may indicate multiple WdkAppProviders are mounted.', {
+        hasExisting: !!this.secureStorageInstance
+      })
+    } else if (this.secureStorageInstance) {
+      log('⚠️ SecureStorage being overwritten. This may indicate multiple WdkAppProviders are mounted.')
+    }
+    
+    this.secureStorageInstance = secureStorage
+    log('✅ SecureStorage singleton set in WalletSetupService')
+  }
+
+  /**
+   * Get the secureStorage singleton instance
+   * Throws error if not initialized (should only happen if called before WdkAppProvider mounts)
+   */
+  private static getSecureStorage(): SecureStorage {
+    if (!this.secureStorageInstance) {
+      throw new Error('SecureStorage not initialized. Ensure WdkAppProvider is mounted.')
+    }
+    return this.secureStorageInstance
+  }
+
+  /**
+   * Check if secureStorage is initialized
+   * Useful for testing or debugging
+   */
+  static isSecureStorageInitialized(): boolean {
+    return this.secureStorageInstance !== null
+  }
+
+  /**
    * Get cache key for identifier
    */
   private static getCacheKey(identifier?: string): string {
@@ -61,7 +107,6 @@ export class WalletSetupService {
    * Requires biometric authentication to ensure authorized wallet creation
    */
   static async createNewWallet(
-    secureStorage: SecureStorage,
     networkConfigs: NetworkConfigs,
     identifier?: string
   ): Promise<{
@@ -69,6 +114,7 @@ export class WalletSetupService {
     encryptedSeed: string
   }> {
     const store = getWorkletStore()
+    const secureStorage = this.getSecureStorage()
 
     // Step 1: Require biometric authentication before creating wallet
     log('🔐 Creating new wallet - biometric authentication required...')
@@ -111,12 +157,12 @@ export class WalletSetupService {
    * Checks cache first, only requires biometric authentication if not cached
    */
   static async loadExistingWallet(
-    secureStorage: SecureStorage,
     identifier?: string
   ): Promise<{
     encryptionKey: string
     encryptedSeed: string
   }> {
+    const secureStorage = this.getSecureStorage()
     const cacheKey = this.getCacheKey(identifier)
     const cached = this.credentialsCache.get(cacheKey)
 
@@ -167,7 +213,8 @@ export class WalletSetupService {
   /**
    * Check if a wallet exists
    */
-  static async hasWallet(secureStorage: SecureStorage, identifier?: string): Promise<boolean> {
+  static async hasWallet(identifier?: string): Promise<boolean> {
+    const secureStorage = this.getSecureStorage()
     return secureStorage.hasWallet(identifier)
   }
 
@@ -177,7 +224,6 @@ export class WalletSetupService {
    * Requires biometric authentication to ensure authorized wallet import
    */
   static async initializeFromMnemonic(
-    secureStorage: SecureStorage,
     networkConfigs: NetworkConfigs,
     mnemonic: string,
     identifier?: string
@@ -187,6 +233,7 @@ export class WalletSetupService {
     encryptedEntropy: string
   }> {
     const store = getWorkletStore()
+    const secureStorage = this.getSecureStorage()
 
     // Step 1: Require biometric authentication before importing wallet
     log('🔐 Importing wallet from mnemonic - biometric authentication required...')
@@ -259,7 +306,6 @@ export class WalletSetupService {
    * Either creates a new wallet or loads an existing one
    */
   static async initializeWallet(
-    secureStorage: SecureStorage,
     networkConfigs: NetworkConfigs,
     options: {
       createNew?: boolean
@@ -279,11 +325,11 @@ export class WalletSetupService {
     if (options.createNew) {
       // Create new wallet
       log('Creating new wallet...')
-      credentials = await this.createNewWallet(secureStorage, networkConfigs, options.identifier)
+      credentials = await this.createNewWallet(networkConfigs, options.identifier)
     } else {
       // Load existing wallet (requires biometric authentication)
       log('Loading existing wallet...')
-      credentials = await this.loadExistingWallet(secureStorage, options.identifier)
+      credentials = await this.loadExistingWallet(options.identifier)
     }
 
     // Initialize WDK with credentials
@@ -293,22 +339,16 @@ export class WalletSetupService {
   /**
    * Delete wallet and clear all data
    * 
-   * @param secureStorage - Optional secure storage instance. If not provided, a default instance is created.
    * @param identifier - Optional identifier for multi-wallet support. If provided, deletes wallet for that identifier.
    *                    If not provided, deletes the default wallet.
-   * 
-   * NOTE: Since all SecureStorage instances access the same app-scoped storage,
-   * any instance can be used for deletion.
    */
   static async deleteWallet(
-    secureStorage?: SecureStorage,
     identifier?: string
   ): Promise<void> {
-    // Use provided instance or create default (all instances access same storage)
-    const storage = secureStorage || createSecureStorage()
+    const secureStorage = this.getSecureStorage()
     
     // Clear secure storage for the specified identifier
-    await storage.deleteWallet(identifier)
+    await secureStorage.deleteWallet(identifier)
 
     // Reset store state
     WorkletLifecycleService.reset()
@@ -321,9 +361,9 @@ export class WalletSetupService {
    * Get encryption key (checks cache first, then secureStorage with biometrics)
    */
   static async getEncryptionKey(
-    secureStorage: SecureStorage,
     identifier?: string
   ): Promise<string | null> {
+    const secureStorage = this.getSecureStorage()
     const cacheKey = this.getCacheKey(identifier)
     const cached = this.credentialsCache.get(cacheKey)
 
@@ -348,9 +388,9 @@ export class WalletSetupService {
    * Get encrypted seed (checks cache first, then secureStorage)
    */
   static async getEncryptedSeed(
-    secureStorage: SecureStorage,
     identifier?: string
   ): Promise<string | null> {
+    const secureStorage = this.getSecureStorage()
     const cacheKey = this.getCacheKey(identifier)
     const cached = this.credentialsCache.get(cacheKey)
 
@@ -373,9 +413,9 @@ export class WalletSetupService {
    * Get encrypted entropy (checks cache first, then secureStorage)
    */
   static async getEncryptedEntropy(
-    secureStorage: SecureStorage,
     identifier?: string
   ): Promise<string | null> {
+    const secureStorage = this.getSecureStorage()
     const cacheKey = this.getCacheKey(identifier)
     const cached = this.credentialsCache.get(cacheKey)
 
@@ -399,18 +439,13 @@ export class WalletSetupService {
    * Retrieves encrypted entropy and encryption key, then decrypts to get mnemonic
    * 
    * @param identifier - Optional identifier for multi-wallet support
-   * @param secureStorage - Optional secure storage instance. If not provided, a default instance is created.
    * @returns Promise<string | null> - The mnemonic phrase or null if not found
    */
   static async getMnemonic(
-    identifier?: string,
-    secureStorage?: SecureStorage
+    identifier?: string
   ): Promise<string | null> {
-    // Use provided instance or create default (all instances access same storage)
-    const storage = secureStorage || createSecureStorage()
-    
-    const encryptedEntropy = await this.getEncryptedEntropy(storage, identifier)
-    const encryptionKey = await this.getEncryptionKey(storage, identifier)
+    const encryptedEntropy = await this.getEncryptedEntropy(identifier)
+    const encryptionKey = await this.getEncryptionKey(identifier)
 
     if (!encryptedEntropy || !encryptionKey) {
       return null

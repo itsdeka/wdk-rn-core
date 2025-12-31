@@ -1,9 +1,6 @@
 // React hooks
 import { useState, useCallback, useMemo } from 'react'
 
-// Internal modules
-import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
-
 // Local imports
 import { WalletSetupService } from '../services/walletSetupService'
 import { WorkletLifecycleService } from '../services/workletLifecycleService'
@@ -41,7 +38,6 @@ import { logError } from '../utils/logger'
  * ```
  */
 export function useWalletSetup(
-  secureStorage: SecureStorage,
   networkConfigs: NetworkConfigs,
   identifier?: string
 ) {
@@ -62,7 +58,6 @@ export function useWalletSetup(
 
       try {
         await WalletSetupService.initializeWallet(
-          secureStorage,
           networkConfigs,
           {
             ...options,
@@ -79,7 +74,7 @@ export function useWalletSetup(
         setIsInitializing(false)
       }
     },
-    [secureStorage, networkConfigs, identifier]
+    [networkConfigs, identifier]
   )
 
   /**
@@ -90,9 +85,9 @@ export function useWalletSetup(
    */
   const hasWallet = useCallback(
     async (walletIdentifier?: string): Promise<boolean> => {
-      return WalletSetupService.hasWallet(secureStorage, walletIdentifier ?? identifier)
+      return WalletSetupService.hasWallet(walletIdentifier ?? identifier)
     },
-    [secureStorage, identifier]
+    [identifier]
   )
 
   /**
@@ -108,7 +103,6 @@ export function useWalletSetup(
 
       try {
         await WalletSetupService.initializeFromMnemonic(
-          secureStorage,
           networkConfigs,
           mnemonic,
           walletIdentifier ?? identifier
@@ -123,7 +117,7 @@ export function useWalletSetup(
         setIsInitializing(false)
       }
     },
-    [secureStorage, networkConfigs, identifier]
+    [networkConfigs, identifier]
   )
 
   /**
@@ -138,7 +132,7 @@ export function useWalletSetup(
       setError(null)
 
       try {
-        await WalletSetupService.deleteWallet(secureStorage, walletIdentifier ?? identifier)
+        await WalletSetupService.deleteWallet(walletIdentifier ?? identifier)
       } catch (err) {
         const errorMessage =
           err instanceof Error ? err.message : String(err)
@@ -149,7 +143,7 @@ export function useWalletSetup(
         setIsInitializing(false)
       }
     },
-    [secureStorage, identifier]
+    [identifier]
   )
 
   // Memoize return object to prevent unnecessary re-renders
