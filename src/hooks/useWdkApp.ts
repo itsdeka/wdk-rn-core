@@ -7,7 +7,7 @@
  * @example
  * ```tsx
  * function MyComponent() {
- *   const { isReady, isInitializing, needsBiometric, completeBiometric } = useWdkApp()
+ *   const { isReady, isInitializing } = useWdkApp()
  *
  *   if (!isReady) {
  *     return <LoadingScreen />

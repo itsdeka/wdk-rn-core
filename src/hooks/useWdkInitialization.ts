@@ -5,7 +5,9 @@
  * - Worklet startup
  * - Wallet existence checking
  * - Wallet initialization (new or existing)
- * - Biometric authentication flow
+ * 
+ * Note: Biometric authentication is handled automatically by the keychain
+ * when reading from secure storage.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -22,10 +24,6 @@ export interface UseWdkInitializationResult {
   walletExists: boolean | null
   /** Whether initialization is in progress */
   isInitializing: boolean
-  /** Waiting for biometric authentication */
-  needsBiometric: boolean
-  /** Call this after biometric authentication succeeds */
-  completeBiometric: () => void
   /** Initialization error if any */
   error: Error | null
   /** Retry initialization after an error */
@@ -39,13 +37,11 @@ export interface UseWdkInitializationResult {
 export function useWdkInitialization(
   secureStorage: SecureStorage,
   networkConfigs: NetworkConfigs,
-  requireBiometric: boolean,
   abortController: AbortController | null,
   identifier?: string
 ): UseWdkInitializationResult {
   const [hasWalletChecked, setHasWalletChecked] = useState(false)
   const [walletExists, setWalletExists] = useState<boolean | null>(null)
-  const [biometricAuthenticated, setBiometricAuthenticated] = useState(!requireBiometric)
   const [initializationError, setInitializationError] = useState<Error | null>(null)
   const [walletInitError, setWalletInitError] = useState<Error | null>(null)
 
@@ -215,9 +211,9 @@ export function useWdkInitialization(
     }
   }, [walletExists, initializeWallet, identifier])
 
-  // Initialize wallet when worklet is started, wallet check is complete, and biometric auth is done
+  // Initialize wallet when worklet is started and wallet check is complete
   useEffect(() => {
-    if (!hasWalletChecked || !isWorkletStarted || !biometricAuthenticated) {
+    if (!hasWalletChecked || !isWorkletStarted) {
       return
     }
 
@@ -280,16 +276,10 @@ export function useWdkInitialization(
     walletExists,
     isWorkletStarted,
     isWalletInitializing,
-    biometricAuthenticated,
     walletInitialized,
     performWalletInitialization,
     abortController,
   ])
-
-  const completeBiometric = useCallback(() => {
-    log('[useWdkInitialization] Biometric authentication completed')
-    setBiometricAuthenticated(true)
-  }, [])
 
   const retry = useCallback(async () => {
     if (!isMountedRef.current) {
@@ -328,14 +318,11 @@ export function useWdkInitialization(
     }
   }, [hasWalletChecked, isWorkletStarted, performWalletInitialization, abortController])
 
-  const needsBiometric = requireBiometric && !biometricAuthenticated && isWorkletStarted && walletExists === true
   const isInitializing = isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted)
 
   return {
     walletExists,
     isInitializing,
-    needsBiometric,
-    completeBiometric,
     error: walletInitError || initializationError,
     retry,
     isWorkletStarted,

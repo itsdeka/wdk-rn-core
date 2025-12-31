@@ -5,8 +5,7 @@
  * Manages the complete initialization flow:
  * 1. Start worklet immediately on app open
  * 2. Check if wallet exists
- * 3. Wait for biometric authentication (if required)
- * 4. Initialize/load wallet
+ * 3. Initialize/load wallet (keychain handles biometric authentication automatically)
  *
  * This provider is generic and reusable - it doesn't know about app-specific
  * concerns like auth state or UI branding.
@@ -34,10 +33,6 @@ export interface WdkAppContextValue {
   isInitializing: boolean
   /** Whether a wallet exists in secure storage (null = checking) */
   walletExists: boolean | null
-  /** Waiting for biometric authentication */
-  needsBiometric: boolean
-  /** Call this after biometric authentication succeeds */
-  completeBiometric: () => void
   /** Initialization error if any */
   error: Error | null
   /** Retry initialization after an error */
@@ -60,8 +55,6 @@ export interface WdkAppProviderProps {
   networkConfigs: NetworkConfigs
   /** Token configurations for balance fetching */
   tokenConfigs: TokenConfigs
-  /** Whether biometric authentication is required before wallet initialization */
-  requireBiometric?: boolean
   /** Whether to automatically fetch balances after wallet initialization */
   autoFetchBalances?: boolean
   /** Balance refresh interval in milliseconds (0 = no auto-refresh) */
@@ -82,7 +75,6 @@ export function WdkAppProvider({
   secureStorage,
   networkConfigs,
   tokenConfigs,
-  requireBiometric = false,
   autoFetchBalances = true,
   balanceRefreshInterval = DEFAULT_BALANCE_REFRESH_INTERVAL_MS,
   identifier,
@@ -120,8 +112,6 @@ export function WdkAppProvider({
   const {
     walletExists,
     isInitializing: isInitializingFromHook,
-    needsBiometric,
-    completeBiometric,
     error: initializationError,
     retry,
     isWorkletStarted,
@@ -129,18 +119,12 @@ export function WdkAppProvider({
   } = useWdkInitialization(
     secureStorage,
     networkConfigs,
-    requireBiometric,
     getController(),
     identifier
   )
 
   // Calculate readiness state
   const isReady = useMemo(() => {
-    // If biometric is required and not authenticated, not ready
-    if (requireBiometric && needsBiometric) {
-      return false
-    }
-
     // If worklet isn't started, not ready
     if (!isWorkletStarted) {
       return false
@@ -159,8 +143,6 @@ export function WdkAppProvider({
     // All conditions met, ready
     return true
   }, [
-    requireBiometric,
-    needsBiometric,
     isWorkletStarted,
     isInitializingFromHook,
     walletExists,
@@ -184,14 +166,12 @@ export function WdkAppProvider({
       isReady,
       isInitializing: isInitializingFromHook,
       walletExists,
-      needsBiometric,
-      completeBiometric,
       error: initializationError,
       retry,
       isFetchingBalances,
       refreshBalances,
     }),
-    [isReady, isInitializingFromHook, walletExists, needsBiometric, completeBiometric, initializationError, retry, isFetchingBalances, refreshBalances]
+    [isReady, isInitializingFromHook, walletExists, initializationError, retry, isFetchingBalances, refreshBalances]
   )
 
   return (
