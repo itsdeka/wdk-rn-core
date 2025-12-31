@@ -130,7 +130,6 @@ function App() {
       tokenConfigs={tokenConfigs}
       autoFetchBalances={true}
       balanceRefreshInterval={30000} // Refresh every 30 seconds
-      requireBiometric={true}
     >
       <WalletApp />
     </WdkAppProvider>
@@ -143,15 +142,9 @@ function WalletApp() {
     isInitializing,
     isFetchingBalances, 
     refreshBalances,
-    needsBiometric,
-    completeBiometric,
     error,
     retry
   } = useWdkApp();
-
-  if (needsBiometric) {
-    return <BiometricPrompt onComplete={completeBiometric} />;
-  }
 
   if (!isReady) return <LoadingScreen />;
 
@@ -355,9 +348,9 @@ interface WdkAppProviderProps {
   secureStorage: SecureStorage
   networkConfigs: NetworkConfigs
   tokenConfigs: TokenConfigs // Required for balance fetching
-  requireBiometric?: boolean
   autoFetchBalances?: boolean // Default: true
   balanceRefreshInterval?: number // Default: 30000ms (30 seconds), 0 to disable
+  identifier?: string // Optional identifier for multi-wallet support
   children: React.ReactNode
 }
 ```
@@ -369,12 +362,10 @@ interface WdkAppContextValue {
   isReady: boolean
   isInitializing: boolean
   walletExists: boolean | null
-  needsBiometric: boolean
-  completeBiometric: () => void
   error: Error | null
   retry: () => void
-  isFetchingBalances: boolean // New: balance fetching state
-  refreshBalances: () => Promise<void> // New: manual balance refresh
+  isFetchingBalances: boolean // Balance fetching state
+  refreshBalances: () => Promise<void> // Manual balance refresh
 }
 ```
 
@@ -458,7 +449,7 @@ Use type guards when accepting data from external sources or APIs.
 ### Recommendations
 
 1. **Always use SecureStorage** for sensitive data (wallet seeds, encryption keys)
-2. **Enable biometric authentication** for wallet operations (`requireBiometric={true}`)
+2. **Biometric authentication** is handled automatically by the keychain when reading from secure storage
 3. **Automatic memory clearing** is enabled by default - sensitive data is cleared when app is backgrounded
 4. **Use error boundaries** to handle errors gracefully
 5. **Validate all inputs** before processing
@@ -486,20 +477,18 @@ The WdkAppProvider follows a specific initialization sequence:
    ↓
 4. Check Wallet Existence (async, after worklet starts)
    ↓
-5. Biometric Authentication (if required and wallet exists)
+5. Initialize Wallet (create new or load existing)
+   - Keychain automatically handles biometric authentication when reading
    ↓
-6. Initialize Wallet (create new or load existing)
+6. Fetch Initial Balances (if autoFetchBalances=true)
    ↓
-7. Fetch Initial Balances (if autoFetchBalances=true)
-   ↓
-8. Ready State (isReady=true)
+7. Ready State (isReady=true)
 ```
 
 ### State Transitions
 
-- `isInitializing`: true during steps 3-6
+- `isInitializing`: true during steps 3-5
 - `walletExists`: null → boolean (after step 4)
-- `needsBiometric`: true if step 5 is required
 - `isReady`: true only after all steps complete
 - `error`: set if any step fails
 
@@ -512,14 +501,13 @@ The WdkAppProvider follows a specific initialization sequence:
 **Solutions**:
 1. Check that `secureStorage` is properly configured and has required methods
 2. Verify `networkConfigs` are valid (use `validateNetworkConfigs()`)
-3. Ensure biometric authentication is available if `requireBiometric={true}`
-4. Check console logs for detailed error messages
-5. Verify worklet bundle is available (check `pear-wrk-wdk` dependency)
-6. Try calling `retry()` method from context
+3. Check console logs for detailed error messages
+4. Verify worklet bundle is available (check `pear-wrk-wdk` dependency)
+5. Try calling `retry()` method from context
 
 **Common Errors**:
 - "WDK not initialized" → Worklet failed to start, check network configs
-- "Biometric authentication required" → User cancelled or device doesn't support biometrics
+- "Biometric authentication required" → User cancelled biometric prompt or device doesn't support biometrics
 - "Encryption key not found" → Secure storage issue, may need to recreate wallet
 
 ### Balance Fetching Issues
