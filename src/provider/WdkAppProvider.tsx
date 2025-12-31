@@ -134,6 +134,11 @@ export function WdkAppProvider({
       return true
     }
 
+    // If there's an error, not ready (user needs to retry)
+    if (initializationError) {
+      return false
+    }
+
     // If wallet is initializing, not ready
     if (isInitializingFromHook) {
       return false
@@ -149,6 +154,7 @@ export function WdkAppProvider({
   }, [
     isWorkletStarted,
     enabled,
+    initializationError,
     isInitializingFromHook,
     walletExists,
     walletInitialized,

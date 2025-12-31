@@ -193,8 +193,12 @@ export class WalletSetupService {
     // If not in cache, get from secureStorage (will trigger biometrics)
     if (!encryptionKey) {
       log('Encryption key not in cache, fetching from secureStorage...')
-      const allEncrypted = await secureStorage.getAllEncrypted(identifier)
-      encryptionKey = allEncrypted.encryptionKey || undefined
+      try {
+        const allEncrypted = await secureStorage.getAllEncrypted(identifier)
+        encryptionKey = allEncrypted.encryptionKey || undefined
+      } catch (error) {
+        throw error
+      }
     } else {
       log('Using cached encryption key (no biometrics needed)')
     }
@@ -222,7 +226,8 @@ export class WalletSetupService {
    */
   static async hasWallet(identifier?: string): Promise<boolean> {
     const secureStorage = this.getSecureStorage()
-    return secureStorage.hasWallet(identifier)
+    const result = await secureStorage.hasWallet(identifier)
+    return result
   }
 
   /**

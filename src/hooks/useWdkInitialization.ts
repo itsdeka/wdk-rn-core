@@ -78,17 +78,65 @@ export function useWdkInitialization(
   // This allows wallet checking to happen when user logs in
   const prevEnabledRef = useRef(enabled)
   useEffect(() => {
-    if (enabled && !prevEnabledRef.current && isWorkletStarted) {
-      // Enabled changed from false to true, and worklet is started
-      // Reset state to trigger wallet checking
-      log('[useWdkInitialization] Enabled changed to true, resetting wallet check state')
-      setHasWalletChecked(false)
-      setWalletExists(null)
-      hasAttemptedWalletInitialization.current = false
-      authenticationErrorOccurredRef.current = false
+    if (enabled && !prevEnabledRef.current) {
+      // Enabled changed from false to true (user logged in)
+      if (isWorkletStarted) {
+        // Worklet is already started - reset wallet check state to trigger wallet checking
+        log('[useWdkInitialization] Enabled changed to true, resetting wallet check state')
+        setHasWalletChecked(false)
+        setWalletExists(null)
+        setWalletInitError(null)
+        hasAttemptedWalletInitialization.current = false
+        authenticationErrorOccurredRef.current = false
+      } else {
+        // Worklet hasn't started yet - reset worklet initialization attempt flag and trigger start
+        log('[useWdkInitialization] Enabled changed to true, but worklet not started - resetting and starting worklet')
+        hasAttemptedWorkletInitialization.current = false
+        setHasWalletChecked(false)
+        setWalletExists(null)
+        setWalletInitError(null)
+        hasAttemptedWalletInitialization.current = false
+        authenticationErrorOccurredRef.current = false
+        
+        // Trigger worklet initialization if not already started/starting
+        if (!isWorkletInitialized && !isWorkletLoading) {
+          const initializeWorklet = async () => {
+            if (abortController?.signal.aborted) {
+              return
+            }
+
+            try {
+              log('[useWdkInitialization] Starting worklet initialization (triggered by enabled change)...')
+              setInitializationError(null)
+              hasAttemptedWorkletInitialization.current = true
+
+              await startWorklet(networkConfigs)
+              
+              if (abortController?.signal.aborted) {
+                return
+              }
+              
+              log('[useWdkInitialization] Worklet started successfully (triggered by enabled change)')
+            } catch (error) {
+              if (abortController?.signal.aborted) {
+                return
+              }
+              
+              const err = normalizeError(error, true, { 
+                component: 'useWdkInitialization', 
+                operation: 'workletInitialization' 
+              })
+              logError('[useWdkInitialization] Failed to initialize worklet (triggered by enabled change):', error)
+              setInitializationError(err)
+            }
+          }
+
+          initializeWorklet()
+        }
+      }
     }
     prevEnabledRef.current = enabled
-  }, [enabled, isWorkletStarted])
+  }, [enabled, isWorkletStarted, isWorkletInitialized, isWorkletLoading, startWorklet, networkConfigs, abortController])
 
   // Initialize worklet immediately when component mounts
   useEffect(() => {
@@ -399,10 +447,11 @@ export function useWdkInitialization(
     ? (isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted))
     : isWorkletLoading
 
+  const finalError = walletInitError || initializationError
   return {
     walletExists,
     isInitializing,
-    error: walletInitError || initializationError,
+    error: finalError,
     retry,
     isWorkletStarted,
     walletInitialized,
