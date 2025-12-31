@@ -6,6 +6,7 @@ import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 
 // Local imports
 import { WalletSetupService } from '../services/walletSetupService'
+import { WorkletLifecycleService } from '../services/workletLifecycleService'
 import type { NetworkConfigs } from '../types'
 import { logError } from '../utils/logger'
 

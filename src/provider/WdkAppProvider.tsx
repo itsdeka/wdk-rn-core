@@ -5,7 +5,7 @@
  * Manages the complete initialization flow:
  * 1. Start worklet immediately on app open
  * 2. Check if wallet exists
- * 3. Initialize/load wallet (keychain handles biometric authentication automatically)
+ * 3. Initialize/load wallet
  *
  * This provider is generic and reusable - it doesn't know about app-specific
  * concerns like auth state or UI branding.

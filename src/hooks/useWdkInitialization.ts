@@ -5,9 +5,6 @@
  * - Worklet startup
  * - Wallet existence checking
  * - Wallet initialization (new or existing)
- * 
- * Note: Biometric authentication is handled automatically by the keychain
- * when reading from secure storage.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -170,6 +167,8 @@ export function useWdkInitialization(
       if (walletExists) {
         log('[useWdkInitialization] Loading existing wallet from secure storage...')
         await initializeWallet({ createNew: false, identifier })
+
+        // read mnemonic
         
         if (signal?.aborted || (operationId !== undefined && operationId !== walletInitOperationId.current)) {
           throw new Error('Wallet initialization cancelled')

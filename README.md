@@ -350,7 +350,6 @@ interface WdkAppProviderProps {
   tokenConfigs: TokenConfigs // Required for balance fetching
   autoFetchBalances?: boolean // Default: true
   balanceRefreshInterval?: number // Default: 30000ms (30 seconds), 0 to disable
-  identifier?: string // Optional identifier for multi-wallet support
   children: React.ReactNode
 }
 ```
@@ -364,8 +363,8 @@ interface WdkAppContextValue {
   walletExists: boolean | null
   error: Error | null
   retry: () => void
-  isFetchingBalances: boolean // Balance fetching state
-  refreshBalances: () => Promise<void> // Manual balance refresh
+  isFetchingBalances: boolean // New: balance fetching state
+  refreshBalances: () => Promise<void> // New: manual balance refresh
 }
 ```
 
@@ -449,11 +448,10 @@ Use type guards when accepting data from external sources or APIs.
 ### Recommendations
 
 1. **Always use SecureStorage** for sensitive data (wallet seeds, encryption keys)
-2. **Biometric authentication** is handled automatically by the keychain when reading from secure storage
-3. **Automatic memory clearing** is enabled by default - sensitive data is cleared when app is backgrounded
-4. **Use error boundaries** to handle errors gracefully
-5. **Validate all inputs** before processing
-6. **Never log sensitive data** - error sanitization helps but be careful with custom logging
+2. **Automatic memory clearing** is enabled by default - sensitive data is cleared when app is backgrounded
+3. **Use error boundaries** to handle errors gracefully
+4. **Validate all inputs** before processing
+5. **Never log sensitive data** - error sanitization helps but be careful with custom logging
 
 ## Performance
 
@@ -478,7 +476,6 @@ The WdkAppProvider follows a specific initialization sequence:
 4. Check Wallet Existence (async, after worklet starts)
    ↓
 5. Initialize Wallet (create new or load existing)
-   - Keychain automatically handles biometric authentication when reading
    ↓
 6. Fetch Initial Balances (if autoFetchBalances=true)
    ↓
@@ -507,7 +504,7 @@ The WdkAppProvider follows a specific initialization sequence:
 
 **Common Errors**:
 - "WDK not initialized" → Worklet failed to start, check network configs
-- "Biometric authentication required" → User cancelled biometric prompt or device doesn't support biometrics
+- "Biometric authentication required" → User cancelled or device doesn't support biometrics
 - "Encryption key not found" → Secure storage issue, may need to recreate wallet
 
 ### Balance Fetching Issues
