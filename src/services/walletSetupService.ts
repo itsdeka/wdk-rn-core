@@ -118,9 +118,16 @@ export class WalletSetupService {
 
     // Step 1: Require biometric authentication before creating wallet
     log('🔐 Creating new wallet - biometric authentication required...')
-    const authenticated = await secureStorage.authenticate()
-    if (!authenticated) {
-      throw new Error('Biometric authentication required to create wallet')
+    try {
+      const authenticated = await secureStorage.authenticate()
+      if (!authenticated) {
+        throw new Error('Biometric authentication required to create wallet')
+      }
+    } catch (error) {
+      // Re-throw authentication errors so they can be properly handled by the UI
+      // This includes AuthenticationError from secure storage
+      log('❌ Biometric authentication failed', error)
+      throw error
     }
 
     // Step 2: Start worklet
@@ -237,9 +244,16 @@ export class WalletSetupService {
 
     // Step 1: Require biometric authentication before importing wallet
     log('🔐 Importing wallet from mnemonic - biometric authentication required...')
-    const authenticated = await secureStorage.authenticate()
-    if (!authenticated) {
-      throw new Error('Biometric authentication required to import wallet')
+    try {
+      const authenticated = await secureStorage.authenticate()
+      if (!authenticated) {
+        throw new Error('Biometric authentication required to import wallet')
+      }
+    } catch (error) {
+      // Re-throw authentication errors so they can be properly handled by the UI
+      // This includes AuthenticationError from secure storage
+      log('❌ Biometric authentication failed', error)
+      throw error
     }
 
     // Step 2: Start worklet
