@@ -60,6 +60,8 @@ export interface WdkAppProviderProps {
   balanceRefreshInterval?: number
   /** Optional identifier for multi-wallet support (e.g., user email, user ID) */
   identifier?: string
+  /** Whether wallet initialization is enabled. When false, skips wallet checking and initialization but still starts worklet. Defaults to true. */
+  enabled?: boolean
   /** Child components (app content) */
   children: React.ReactNode
 }
@@ -76,6 +78,7 @@ export function WdkAppProvider({
   autoFetchBalances = true,
   balanceRefreshInterval = DEFAULT_BALANCE_REFRESH_INTERVAL_MS,
   identifier,
+  enabled = true,
   children,
 }: WdkAppProviderProps) {
   // Create secureStorage singleton
@@ -115,7 +118,8 @@ export function WdkAppProvider({
     secureStorage,
     networkConfigs,
     getController(),
-    identifier
+    identifier,
+    enabled
   )
 
   // Calculate readiness state
@@ -123,6 +127,11 @@ export function WdkAppProvider({
     // If worklet isn't started, not ready
     if (!isWorkletStarted) {
       return false
+    }
+
+    // If wallet initialization is disabled, ready once worklet is started
+    if (!enabled) {
+      return true
     }
 
     // If wallet is initializing, not ready
@@ -139,6 +148,7 @@ export function WdkAppProvider({
     return true
   }, [
     isWorkletStarted,
+    enabled,
     isInitializingFromHook,
     walletExists,
     walletInitialized,
