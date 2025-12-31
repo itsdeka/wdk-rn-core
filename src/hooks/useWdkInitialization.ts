@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
+import { AuthenticationError } from '@tetherto/wdk-rn-secure-storage'
 import type { NetworkConfigs } from '../types'
 import { useWorklet } from './useWorklet'
 import { useWalletSetup } from './useWalletSetup'
@@ -47,6 +48,8 @@ export function useWdkInitialization(
   // Track operation IDs to prevent race conditions
   const walletInitOperationId = useRef(0)
   const isMountedRef = useRef(true)
+  // Track if authentication error occurred to prevent automatic retries
+  const authenticationErrorOccurredRef = useRef(false)
 
   const {
     isWorkletStarted,
@@ -198,6 +201,21 @@ export function useWdkInitialization(
         throw error
       }
       
+      // Check if this is an AuthenticationError to prevent automatic retries
+      const isAuthenticationError = 
+        error instanceof AuthenticationError ||
+        (error instanceof Error && error.name === 'AuthenticationError') ||
+        (error instanceof Error && (
+          error.message.toLowerCase().includes('authentication') ||
+          error.message.toLowerCase().includes('biometric') ||
+          error.message.toLowerCase().includes('authentication required but failed')
+        ))
+      
+      if (isAuthenticationError) {
+        log('[useWdkInitialization] Authentication error detected - preventing automatic retry')
+        authenticationErrorOccurredRef.current = true
+      }
+      
       const err = normalizeError(error, true, { 
         component: 'useWdkInitialization', 
         operation: 'walletInitialization' 
@@ -221,6 +239,14 @@ export function useWdkInitialization(
       return
     }
 
+    // Don't automatically retry if authentication error occurred - wait for user to click retry
+    // This check must be early and persistent to prevent any automatic retries
+    if (authenticationErrorOccurredRef.current) {
+      log('[useWdkInitialization] Skipping automatic initialization due to authentication error - waiting for user retry')
+      return
+    }
+
+    // Don't attempt if already attempting or currently initializing
     if (hasAttemptedWalletInitialization.current || isWalletInitializing) {
       return
     }
@@ -247,7 +273,34 @@ export function useWdkInitialization(
       try {
         await performWalletInitialization(abortController?.signal, currentOperationId)
       } catch (error) {
-        // Only reset flag if this operation was cancelled or superseded
+        // Check if this is an authentication error - if so, don't reset flags to prevent retry
+        // Check both the original error and normalized error properties
+        const isAuthenticationError = 
+          error instanceof AuthenticationError ||
+          (error instanceof Error && (
+            error.name === 'AuthenticationError' ||
+            error.message.toLowerCase().includes('authentication') ||
+            error.message.toLowerCase().includes('biometric') ||
+            error.message.toLowerCase().includes('authentication required but failed')
+          ))
+        
+        if (isAuthenticationError) {
+          log('[useWdkInitialization] Authentication error in initializeWalletFlow - keeping flags set to prevent retry')
+          // Ensure the flag is set (in case it wasn't set in performWalletInitialization)
+          authenticationErrorOccurredRef.current = true
+          // Ensure error is set in state (it should already be set in performWalletInitialization, but ensure it)
+          if (isMountedRef.current && error instanceof Error) {
+            const err = normalizeError(error, true, { 
+              component: 'useWdkInitialization', 
+              operation: 'walletInitialization' 
+            })
+            setWalletInitError(err)
+          }
+          // Keep hasAttemptedWalletInitialization.current = true to prevent automatic retry
+          return // Exit early, don't reset any flags
+        }
+        
+        // Only reset flag if this operation was cancelled or superseded AND it's not an auth error
         if (abortController?.signal.aborted || currentOperationId !== walletInitOperationId.current) {
           // Only reset if no newer operation has started
           if (currentOperationId === walletInitOperationId.current) {
@@ -262,12 +315,15 @@ export function useWdkInitialization(
     return () => {
       // Only cancel if this is still the current operation
       if (currentOperationId === walletInitOperationId.current) {
-        // Increment operation ID to invalidate this operation
-        walletInitOperationId.current++
-        if (abortController && !abortController.signal.aborted) {
-          abortController.abort()
+        // Don't reset flags if authentication error occurred - we want to prevent automatic retry
+        if (!authenticationErrorOccurredRef.current) {
+          // Increment operation ID to invalidate this operation
+          walletInitOperationId.current++
+          if (abortController && !abortController.signal.aborted) {
+            abortController.abort()
+          }
+          hasAttemptedWalletInitialization.current = false
         }
-        hasAttemptedWalletInitialization.current = false
       }
     }
   }, [
@@ -288,6 +344,9 @@ export function useWdkInitialization(
     log('[useWdkInitialization] Retrying initialization...')
     setWalletInitError(null)
     setInitializationError(null)
+    
+    // Reset authentication error flag to allow retry
+    authenticationErrorOccurredRef.current = false
     
     // Generate new operation ID for retry
     const retryOperationId = ++walletInitOperationId.current
