@@ -295,6 +295,7 @@ export class WorkletLifecycleService {
   ): Promise<{
     mnemonic: string
   }> {
+    console.log('JNFSIUFNISU')
     const store = getWorkletStore()
     const state = store.getState()
     
@@ -302,8 +303,12 @@ export class WorkletLifecycleService {
       throw new Error('Worklet must be started before getting mnemonic')
     }
 
+    console.log('FIMFIMFI')
+
     try {
       const extendedHrpc = asExtendedHRPC(state.hrpc)
+
+      console.log("VVVV")
       
       const result = await extendedHrpc.getMnemonicFromEntropy({
         encryptedEntropy,

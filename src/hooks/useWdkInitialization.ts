@@ -36,7 +36,8 @@ export function useWdkInitialization(
   secureStorage: SecureStorage,
   networkConfigs: NetworkConfigs,
   abortController: AbortController | null,
-  identifier?: string
+  identifier?: string,
+  enabled: boolean = true
 ): UseWdkInitializationResult {
   const [hasWalletChecked, setHasWalletChecked] = useState(false)
   const [walletExists, setWalletExists] = useState<boolean | null>(null)
@@ -72,6 +73,22 @@ export function useWdkInitialization(
       isMountedRef.current = false
     }
   }, [])
+
+  // Reset wallet checking state when enabled changes from false to true
+  // This allows wallet checking to happen when user logs in
+  const prevEnabledRef = useRef(enabled)
+  useEffect(() => {
+    if (enabled && !prevEnabledRef.current && isWorkletStarted) {
+      // Enabled changed from false to true, and worklet is started
+      // Reset state to trigger wallet checking
+      log('[useWdkInitialization] Enabled changed to true, resetting wallet check state')
+      setHasWalletChecked(false)
+      setWalletExists(null)
+      hasAttemptedWalletInitialization.current = false
+      authenticationErrorOccurredRef.current = false
+    }
+    prevEnabledRef.current = enabled
+  }, [enabled, isWorkletStarted])
 
   // Initialize worklet immediately when component mounts
   useEffect(() => {
@@ -117,9 +134,9 @@ export function useWdkInitialization(
     initializeWorklet()
   }, [isWorkletInitialized, isWorkletLoading, networkConfigs, startWorklet, abortController])
 
-  // Check if wallet exists when worklet is started
+  // Check if wallet exists when worklet is started (only if enabled)
   useEffect(() => {
-    if (!isWorkletStarted || hasWalletChecked) {
+    if (!isWorkletStarted || hasWalletChecked || !enabled) {
       return
     }
 
@@ -148,7 +165,7 @@ export function useWdkInitialization(
     return () => {
       cancelled = true
     }
-  }, [isWorkletStarted, hasWalletChecked, hasWallet, identifier])
+  }, [isWorkletStarted, hasWalletChecked, hasWallet, identifier, enabled])
 
   // Shared wallet initialization logic
   const performWalletInitialization = useCallback(async (signal?: AbortSignal, operationId?: number) => {
@@ -228,9 +245,9 @@ export function useWdkInitialization(
     }
   }, [walletExists, initializeWallet, identifier])
 
-  // Initialize wallet when worklet is started and wallet check is complete
+  // Initialize wallet when worklet is started and wallet check is complete (only if enabled)
   useEffect(() => {
-    if (!hasWalletChecked || !isWorkletStarted) {
+    if (!hasWalletChecked || !isWorkletStarted || !enabled) {
       return
     }
 
@@ -334,6 +351,7 @@ export function useWdkInitialization(
     walletInitialized,
     performWalletInitialization,
     abortController,
+    enabled,
   ])
 
   const retry = useCallback(async () => {
@@ -376,7 +394,10 @@ export function useWdkInitialization(
     }
   }, [hasWalletChecked, isWorkletStarted, performWalletInitialization, abortController])
 
-  const isInitializing = isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted)
+  // When disabled, mark as not initializing once worklet is started
+  const isInitializing = enabled 
+    ? (isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted))
+    : isWorkletLoading
 
   return {
     walletExists,
