@@ -53,6 +53,8 @@ describe('WalletSetupService', () => {
     if (typeof (mockSecureStorage as any)._clearStorage === 'function') {
       (mockSecureStorage as any)._clearStorage()
     }
+    // Clear credentials cache between tests
+    WalletSetupService.clearCredentialsCache()
     // Reset worklet store mock - default state
     const mockStore = getWorkletStore() as any
     if (mockStore) {
@@ -131,6 +133,7 @@ describe('WalletSetupService', () => {
 
       expect(result).toHaveProperty('encryptionKey', 'test-key')
       expect(result).toHaveProperty('encryptedSeed', 'test-seed')
+      expect(mockSecureStorage.getEncryptedSeed).toHaveBeenCalledWith(undefined)
       expect(mockSecureStorage.getAllEncrypted).toHaveBeenCalledWith(undefined)
     })
 
@@ -147,16 +150,23 @@ describe('WalletSetupService', () => {
 
       expect(result).toHaveProperty('encryptionKey', 'test-key')
       expect(result).toHaveProperty('encryptedSeed', 'test-seed')
+      expect(mockSecureStorage.getEncryptedSeed).toHaveBeenCalledWith(identifier)
       expect(mockSecureStorage.getAllEncrypted).toHaveBeenCalledWith(identifier)
     })
 
     it('should throw error if encryption key not found', async () => {
+      // Ensure cache is clear and storage is empty
+      WalletSetupService.clearCredentialsCache()
+      await mockSecureStorage.clearAll()
+      
       await expect(
         WalletSetupService.loadExistingWallet(mockSecureStorage)
       ).rejects.toThrow('Encryption key not found')
     })
 
     it('should throw error if encrypted seed not found', async () => {
+      // Ensure cache is clear
+      WalletSetupService.clearCredentialsCache()
       await mockSecureStorage.setEncryptionKey('test-key', undefined)
       // Don't set seed
 
@@ -267,6 +277,9 @@ describe('WalletSetupService', () => {
         isInitialized: false,
       }))
 
+      // Ensure cache is clear
+      WalletSetupService.clearCredentialsCache()
+      
       // Setup: create a wallet first
       await mockSecureStorage.setEncryptionKey('test-key', undefined)
       await mockSecureStorage.setEncryptedSeed('test-seed', undefined)
@@ -277,6 +290,7 @@ describe('WalletSetupService', () => {
         { createNew: false }
       )
 
+      expect(mockSecureStorage.getEncryptedSeed).toHaveBeenCalled()
       expect(mockSecureStorage.getAllEncrypted).toHaveBeenCalled()
       expect(WorkletLifecycleService.initializeWDK).toHaveBeenCalled()
     })
@@ -308,6 +322,9 @@ describe('WalletSetupService', () => {
         isInitialized: false,
       }))
 
+      // Ensure cache is clear
+      WalletSetupService.clearCredentialsCache()
+      
       const identifier = 'user@example.com'
       await mockSecureStorage.setEncryptionKey('test-key', identifier)
       await mockSecureStorage.setEncryptedSeed('test-seed', identifier)
@@ -318,6 +335,7 @@ describe('WalletSetupService', () => {
         { createNew: false, identifier }
       )
 
+      expect(mockSecureStorage.getEncryptedSeed).toHaveBeenCalledWith(identifier)
       expect(mockSecureStorage.getAllEncrypted).toHaveBeenCalledWith(identifier)
     })
   })

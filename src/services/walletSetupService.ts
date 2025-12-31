@@ -7,10 +7,54 @@ import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
 import { log } from '../utils/logger'
 
 /**
+ * Cached credentials interface
+ */
+interface CachedCredentials {
+  encryptionKey?: string
+  encryptedSeed?: string
+  encryptedEntropy?: string
+}
+
+/**
  * Wallet setup service
  * Handles creating new wallets and loading existing wallets with biometric authentication
+ * Caches credentials in ephemeral memory to avoid repeated biometric prompts
  */
 export class WalletSetupService {
+  /**
+   * Internal cache for credentials (ephemeral memory only)
+   * Keyed by identifier for multi-wallet support
+   */
+  private static credentialsCache = new Map<string, CachedCredentials>()
+
+  /**
+   * Get cache key for identifier
+   */
+  private static getCacheKey(identifier?: string): string {
+    return identifier || 'default'
+  }
+
+  /**
+   * Cache credentials after retrieval
+   */
+  private static cacheCredentials(
+    identifier: string | undefined,
+    encryptionKey?: string,
+    encryptedSeed?: string,
+    encryptedEntropy?: string
+  ): void {
+    const cacheKey = this.getCacheKey(identifier)
+    const existing = this.credentialsCache.get(cacheKey) || {}
+    
+    this.credentialsCache.set(cacheKey, {
+      ...existing,
+      ...(encryptionKey && { encryptionKey }),
+      ...(encryptedSeed && { encryptedSeed }),
+      ...(encryptedEntropy && { encryptedEntropy }),
+    })
+    
+    log('✅ Credentials cached in memory', { hasIdentifier: !!identifier })
+  }
   /**
    * Create a new wallet
    * Generates entropy, encrypts it, and stores credentials securely
@@ -46,6 +90,14 @@ export class WalletSetupService {
     await secureStorage.setEncryptedSeed(result.encryptedSeedBuffer, identifier)
     await secureStorage.setEncryptedEntropy(result.encryptedEntropyBuffer, identifier)
 
+    // Cache credentials in memory
+    this.cacheCredentials(
+      identifier,
+      result.encryptionKey,
+      result.encryptedSeedBuffer,
+      result.encryptedEntropyBuffer
+    )
+
     log('✅ New wallet created and stored securely')
     
     return {
@@ -56,7 +108,7 @@ export class WalletSetupService {
 
   /**
    * Load existing wallet from secure storage
-   * Requires biometric authentication to access encryption key
+   * Checks cache first, only requires biometric authentication if not cached
    */
   static async loadExistingWallet(
     secureStorage: SecureStorage,
@@ -65,11 +117,34 @@ export class WalletSetupService {
     encryptionKey: string
     encryptedSeed: string
   }> {
+    const cacheKey = this.getCacheKey(identifier)
+    const cached = this.credentialsCache.get(cacheKey)
+
+    // Check if all required credentials are cached
+    if (cached?.encryptionKey && cached?.encryptedSeed) {
+      log('✅ Wallet loaded from cache (no biometrics needed)')
+      return {
+        encryptionKey: cached.encryptionKey,
+        encryptedSeed: cached.encryptedSeed,
+      }
+    }
+
     log('🔓 Loading existing wallet - biometric authentication required...')
     
-    const allEncrypted = await secureStorage.getAllEncrypted(identifier)
-
-    const { encryptionKey, encryptedSeed } = allEncrypted
+    // Get encrypted seed first (doesn't require biometrics)
+    const encryptedSeed = await secureStorage.getEncryptedSeed(identifier)
+    
+    // Try to get encryption key from cache first
+    let encryptionKey = cached?.encryptionKey
+    
+    // If not in cache, get from secureStorage (will trigger biometrics)
+    if (!encryptionKey) {
+      log('Encryption key not in cache, fetching from secureStorage...')
+      const allEncrypted = await secureStorage.getAllEncrypted(identifier)
+      encryptionKey = allEncrypted.encryptionKey || undefined
+    } else {
+      log('Using cached encryption key (no biometrics needed)')
+    }
 
     if (!encryptionKey) {
       throw new Error('Encryption key not found. Authentication may have failed or wallet does not exist.')
@@ -78,6 +153,9 @@ export class WalletSetupService {
     if (!encryptedSeed) {
       throw new Error('Encrypted seed not found. Authentication may have failed or wallet does not exist.')
     }
+
+    // Cache credentials for future use
+    this.cacheCredentials(identifier, encryptionKey, encryptedSeed)
 
     log('✅ Wallet loaded successfully from secure storage')
     return {
@@ -129,6 +207,14 @@ export class WalletSetupService {
     await secureStorage.setEncryptionKey(result.encryptionKey, identifier)
     await secureStorage.setEncryptedSeed(result.encryptedSeedBuffer, identifier)
     await secureStorage.setEncryptedEntropy(result.encryptedEntropyBuffer, identifier)
+
+    // Cache credentials in memory
+    this.cacheCredentials(
+      identifier,
+      result.encryptionKey,
+      result.encryptedSeedBuffer,
+      result.encryptedEntropyBuffer
+    )
 
     // Step 5: Initialize WDK with the credentials
     await WorkletLifecycleService.initializeWDK({
@@ -226,6 +312,133 @@ export class WalletSetupService {
 
     // Reset store state
     WorkletLifecycleService.reset()
+    
+    // Clear credentials cache
+    this.clearCredentialsCache(identifier)
+  }
+
+  /**
+   * Get encryption key (checks cache first, then secureStorage with biometrics)
+   */
+  static async getEncryptionKey(
+    secureStorage: SecureStorage,
+    identifier?: string
+  ): Promise<string | null> {
+    const cacheKey = this.getCacheKey(identifier)
+    const cached = this.credentialsCache.get(cacheKey)
+
+    if (cached?.encryptionKey) {
+      log('✅ Encryption key retrieved from cache (no biometrics needed)')
+      return cached.encryptionKey
+    }
+
+    log('Encryption key not in cache, fetching from secureStorage...')
+    const allEncrypted = await secureStorage.getAllEncrypted(identifier)
+    const encryptionKey = allEncrypted.encryptionKey || null
+
+    if (encryptionKey) {
+      // Cache it for future use
+      this.cacheCredentials(identifier, encryptionKey)
+    }
+
+    return encryptionKey
+  }
+
+  /**
+   * Get encrypted seed (checks cache first, then secureStorage)
+   */
+  static async getEncryptedSeed(
+    secureStorage: SecureStorage,
+    identifier?: string
+  ): Promise<string | null> {
+    const cacheKey = this.getCacheKey(identifier)
+    const cached = this.credentialsCache.get(cacheKey)
+
+    if (cached?.encryptedSeed) {
+      log('✅ Encrypted seed retrieved from cache')
+      return cached.encryptedSeed
+    }
+
+    const encryptedSeed = await secureStorage.getEncryptedSeed(identifier)
+
+    if (encryptedSeed) {
+      // Cache it for future use
+      this.cacheCredentials(identifier, undefined, encryptedSeed)
+    }
+
+    return encryptedSeed || null
+  }
+
+  /**
+   * Get encrypted entropy (checks cache first, then secureStorage)
+   */
+  static async getEncryptedEntropy(
+    secureStorage: SecureStorage,
+    identifier?: string
+  ): Promise<string | null> {
+    const cacheKey = this.getCacheKey(identifier)
+    const cached = this.credentialsCache.get(cacheKey)
+
+    if (cached?.encryptedEntropy) {
+      log('✅ Encrypted entropy retrieved from cache')
+      return cached.encryptedEntropy
+    }
+
+    const encryptedEntropy = await secureStorage.getEncryptedEntropy(identifier)
+
+    if (encryptedEntropy) {
+      // Cache it for future use
+      this.cacheCredentials(identifier, undefined, undefined, encryptedEntropy)
+    }
+
+    return encryptedEntropy || null
+  }
+
+  /**
+   * Get mnemonic phrase from wallet
+   * Retrieves encrypted entropy and encryption key, then decrypts to get mnemonic
+   * 
+   * @param identifier - Optional identifier for multi-wallet support
+   * @param secureStorage - Optional secure storage instance. If not provided, a default instance is created.
+   * @returns Promise<string | null> - The mnemonic phrase or null if not found
+   */
+  static async getMnemonic(
+    identifier?: string,
+    secureStorage?: SecureStorage
+  ): Promise<string | null> {
+    // Use provided instance or create default (all instances access same storage)
+    const storage = secureStorage || createSecureStorage()
+    
+    const encryptedEntropy = await this.getEncryptedEntropy(storage, identifier)
+    const encryptionKey = await this.getEncryptionKey(storage, identifier)
+
+    if (!encryptedEntropy || !encryptionKey) {
+      return null
+    }
+
+    const result = await WorkletLifecycleService.getMnemonicFromEntropy(
+      encryptedEntropy,
+      encryptionKey
+    )
+    
+    return result.mnemonic || null
+  }
+
+  /**
+   * Clear all cached credentials
+   * Should be called on logout or app background for security
+   */
+  static clearCredentialsCache(identifier?: string): void {
+    if (identifier) {
+      const deleted = this.credentialsCache.delete(this.getCacheKey(identifier))
+      if (deleted) {
+        log('✅ Credentials cache cleared', { identifier })
+      }
+    } else {
+      const count = this.credentialsCache.size
+      this.credentialsCache.clear()
+      log('✅ All credentials cache cleared', { clearedCount: count })
+    }
   }
 }
 

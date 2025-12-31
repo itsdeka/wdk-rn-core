@@ -36,6 +36,8 @@ export { useWallet } from './hooks/useWallet'
 export { useWalletSetup } from './hooks/useWalletSetup'
 export { useWdkApp } from './hooks/useWdkApp'
 export { useBalanceFetcher } from './hooks/useBalanceFetcher'
+export { useMnemonic } from './hooks/useMnemonic'
+export type { UseMnemonicReturn } from './hooks/useMnemonic'
 
 // Validation Utilities (for validating configs before use)
 export { 
