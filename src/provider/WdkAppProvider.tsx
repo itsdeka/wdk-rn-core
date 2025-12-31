@@ -12,11 +12,12 @@
  */
 
 import React, { createContext, useEffect, useMemo } from 'react'
-import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
+import { createSecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import type { NetworkConfigs, TokenConfigs } from '../types'
 import { useWdkInitialization } from '../hooks/useWdkInitialization'
 import { useWdkBalanceSync } from '../hooks/useWdkBalanceSync'
 import { useAbortController } from '../hooks/useAbortController'
+import { WalletSetupService } from '../services/walletSetupService'
 import { validateNetworkConfigs, validateTokenConfigs, validateBalanceRefreshInterval } from '../utils/validation'
 import { normalizeError } from '../utils/errorUtils'
 import { DEFAULT_BALANCE_REFRESH_INTERVAL_MS } from '../utils/constants'
@@ -49,8 +50,6 @@ const WdkAppContext = createContext<WdkAppContextValue | null>(null)
  * Provider props
  */
 export interface WdkAppProviderProps {
-  /** Secure storage instance */
-  secureStorage: SecureStorage
   /** Network configurations */
   networkConfigs: NetworkConfigs
   /** Token configurations for balance fetching */
@@ -72,7 +71,6 @@ export interface WdkAppProviderProps {
  * Automatically fetches balances when wallet is ready.
  */
 export function WdkAppProvider({
-  secureStorage,
   networkConfigs,
   tokenConfigs,
   autoFetchBalances = true,
@@ -80,30 +78,27 @@ export function WdkAppProvider({
   identifier,
   children,
 }: WdkAppProviderProps) {
+  // Create secureStorage singleton
+  const secureStorage = useMemo(() => createSecureStorage(), [])
+
+  // Set secureStorage in WalletSetupService
+  useEffect(() => {
+    WalletSetupService.setSecureStorage(secureStorage)
+  }, [secureStorage])
+
   // Validate props on mount and when props change
   useEffect(() => {
     try {
       validateNetworkConfigs(networkConfigs)
       validateTokenConfigs(tokenConfigs)
       validateBalanceRefreshInterval(balanceRefreshInterval)
-      
-      // Validate secureStorage has required methods
-      if (!secureStorage || typeof secureStorage !== 'object') {
-        throw new Error('secureStorage must be a SecureStorage instance')
-      }
-      const requiredMethods = ['authenticate', 'hasWallet', 'setEncryptionKey', 'setEncryptedSeed', 'getAllEncrypted']
-      for (const method of requiredMethods) {
-        if (typeof (secureStorage as unknown as Record<string, unknown>)[method] !== 'function') {
-          throw new Error(`secureStorage must have a ${method} method`)
-        }
-      }
     } catch (error) {
       const err = normalizeError(error, true, { component: 'WdkAppProvider', operation: 'propsValidation' })
       logError('[WdkAppProvider] Invalid props:', err)
       // Always throw validation errors - they indicate programming errors
       throw err
     }
-  }, [networkConfigs, tokenConfigs, balanceRefreshInterval, secureStorage])
+  }, [networkConfigs, tokenConfigs, balanceRefreshInterval])
 
   // AbortController hook for managing async operation cancellation
   const { getController } = useAbortController()

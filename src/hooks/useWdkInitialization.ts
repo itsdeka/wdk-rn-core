@@ -59,7 +59,7 @@ export function useWdkInitialization(
     initializeWallet,
     hasWallet,
     isInitializing: isWalletInitializing,
-  } = useWalletSetup(secureStorage, networkConfigs, identifier)
+  } = useWalletSetup(networkConfigs, identifier)
 
   const { isInitialized: walletInitialized } = useWallet()
 
