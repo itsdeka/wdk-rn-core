@@ -1,7 +1,5 @@
-// React hooks
-import { useState, useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
-// Local imports
 import { WalletSetupService } from '../services/walletSetupService'
 import { WorkletLifecycleService } from '../services/workletLifecycleService'
 import type { NetworkConfigs } from '../types'
@@ -37,10 +35,19 @@ import { logError } from '../utils/logger'
  * await deleteWallet('user@example.com')
  * ```
  */
+export interface UseWalletSetupResult {
+  initializeWallet: (options?: { createNew?: boolean; identifier?: string }) => Promise<void>
+  initializeFromMnemonic: (mnemonic: string, walletIdentifier?: string) => Promise<void>
+  hasWallet: (walletIdentifier?: string) => Promise<boolean>
+  deleteWallet: (walletIdentifier?: string) => Promise<void>
+  isInitializing: boolean
+  error: string | null
+}
+
 export function useWalletSetup(
   networkConfigs: NetworkConfigs,
   identifier?: string
-) {
+): UseWalletSetupResult {
   const [isInitializing, setIsInitializing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -158,14 +165,5 @@ export function useWalletSetup(
     }),
     [initializeWallet, initializeFromMnemonic, hasWallet, deleteWallet, isInitializing, error]
   )
-
-  return {
-    initializeWallet,
-    initializeFromMnemonic,
-    hasWallet,
-    deleteWallet,
-    isInitializing,
-    error,
-  }
 }
 

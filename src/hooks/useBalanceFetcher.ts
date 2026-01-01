@@ -10,27 +10,30 @@
  * - Fetching balances for all wallets, networks, and tokens
  */
 
-// React hooks
 import { useCallback, useMemo } from 'react'
 
-// Internal modules
-import { getWorkletStore } from '../store/workletStore'
+import { AccountService } from '../services/accountService'
+import { AddressService } from '../services/addressService'
+import { BalanceService } from '../services/balanceService'
 import { getWalletStore } from '../store/walletStore'
+import { getWorkletStore } from '../store/workletStore'
 import type {
+  BalanceFetchResult,
   TokenConfig,
   TokenConfigs,
-  Wallet,
-  BalanceFetchResult,
   TokenConfigProvider,
   TokenHelpers,
+  Wallet,
 } from '../types'
-import { AddressService } from '../services/addressService'
-import { AccountService } from '../services/accountService'
-import { BalanceService } from '../services/balanceService'
-
-// Local imports
 import { convertBalanceToString } from '../utils/balanceUtils'
 import { log, logError, logWarn } from '../utils/logger'
+
+// Constants
+const ACCOUNT_METHOD_GET_BALANCE = 'getBalance'
+const ACCOUNT_METHOD_GET_TOKEN_BALANCE = 'getTokenBalance'
+const WALLET_IDENTIFIER_PREFIX = 'wallet-'
+const MAIN_WALLET_NAME = 'Main Wallet'
+const WALLET_NAME_PREFIX = 'Wallet '
 
 /**
  * Create token helpers from token configs
@@ -74,8 +77,8 @@ function getAllWalletsFromWalletStore(walletStore: ReturnType<typeof getWalletSt
     .sort((a, b) => a - b)
     .map((accountIndex) => ({
       accountIndex,
-      identifier: `wallet-${accountIndex}`,
-      name: accountIndex === 0 ? 'Main Wallet' : `Wallet ${accountIndex}`,
+      identifier: `${WALLET_IDENTIFIER_PREFIX}${accountIndex}`,
+      name: accountIndex === 0 ? MAIN_WALLET_NAME : `${WALLET_NAME_PREFIX}${accountIndex}`,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     }))
@@ -102,10 +105,20 @@ function getAllWalletsFromWalletStore(walletStore: ReturnType<typeof getWalletSt
  * })
  * ```
  */
+export interface UseBalanceFetcherResult {
+  // Individual fetch methods
+  fetchBalance: (network: string, accountIndex: number, tokenAddress: string | null) => Promise<BalanceFetchResult>
+  // Batch fetch methods
+  fetchAllBalances: () => Promise<BalanceFetchResult[]>
+  fetchAllBalancesForWallet: (accountIndex: number) => Promise<BalanceFetchResult[]>
+  fetchBalancesForNetwork: (network: string) => Promise<BalanceFetchResult[]>
+  fetchBalancesForWalletAndNetwork: (accountIndex: number, network: string) => Promise<BalanceFetchResult[]>
+}
+
 export function useBalanceFetcher(options: {
   walletStore: ReturnType<typeof getWalletStore>
   tokenConfigs: TokenConfigProvider
-}) {
+}): UseBalanceFetcherResult {
   const { walletStore, tokenConfigs: tokenConfigProvider } = options
 
   // Validate configuration
@@ -155,82 +168,14 @@ export function useBalanceFetcher(options: {
   )
 
   /**
-   * Fetch native token balance for a specific wallet and network
+   * Internal function to fetch balance (native or token)
+   * Handles both native and ERC20 token balances with shared logic
    */
-  const fetchNativeBalance = useCallback(
-    async (
-      network: string,
-      accountIndex: number
-    ): Promise<BalanceFetchResult> => {
-      if (!getIsInitialized()) {
-        return {
-          success: false,
-          network,
-          accountIndex,
-          tokenAddress: null,
-          balance: null,
-          error: 'Wallet not initialized',
-        }
-      }
-
-      BalanceService.setBalanceLoading(network, accountIndex, null, true)
-
-      try {
-        log(`[BalanceFetcher] Calling getBalance for ${network}:${accountIndex}...`)
-        // Call getBalance method on the account for native token
-        const balanceResult = await AccountService.callAccountMethod<unknown>(
-          network,
-          accountIndex,
-          'getBalance',
-          null
-        )
-        log(`[BalanceFetcher] getBalance result for ${network}:${accountIndex}:`, balanceResult)
-
-        // Convert to string (handles BigInt values)
-        const balance = convertBalanceToString(balanceResult)
-
-        // Update store with fetched balance
-        BalanceService.updateBalance(accountIndex, network, null, balance)
-        BalanceService.updateLastBalanceUpdate(network, accountIndex)
-        BalanceService.setBalanceLoading(network, accountIndex, null, false)
-
-        return {
-          success: true,
-          network,
-          accountIndex,
-          tokenAddress: null,
-          balance,
-        }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error)
-        logError(
-          `Failed to fetch native balance for ${network}:${accountIndex}:`,
-          error
-        )
-        BalanceService.setBalanceLoading(network, accountIndex, null, false)
-
-        return {
-          success: false,
-          network,
-          accountIndex,
-          tokenAddress: null,
-          balance: null,
-          error: errorMessage,
-        }
-      }
-    },
-    [getIsInitialized]
-  )
-
-  /**
-   * Fetch ERC20 token balance for a specific wallet, network, and token
-   */
-  const fetchTokenBalance = useCallback(
+  const fetchBalanceInternal = useCallback(
     async (
       network: string,
       accountIndex: number,
-      tokenAddress: string
+      tokenAddress: string | null
     ): Promise<BalanceFetchResult> => {
       if (!getIsInitialized()) {
         return {
@@ -246,13 +191,24 @@ export function useBalanceFetcher(options: {
       BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, true)
 
       try {
-        // Call getTokenBalance method on the account for ERC20 token
-        const balanceResult = await AccountService.callAccountMethod<unknown>(
+        const isNative = tokenAddress === null
+        const methodName = isNative ? ACCOUNT_METHOD_GET_BALANCE : ACCOUNT_METHOD_GET_TOKEN_BALANCE
+        const methodArg = isNative ? null : tokenAddress
+
+        if (isNative) {
+          log(`[BalanceFetcher] Calling ${ACCOUNT_METHOD_GET_BALANCE} for ${network}:${accountIndex}...`)
+        }
+
+        const balanceResult = await AccountService.callAccountMethod<string>(
           network,
           accountIndex,
-          'getTokenBalance',
-          tokenAddress
+          methodName,
+          methodArg
         )
+
+        if (isNative) {
+          log(`[BalanceFetcher] ${ACCOUNT_METHOD_GET_BALANCE} result for ${network}:${accountIndex}:`, balanceResult)
+        }
 
         // Convert to string (handles BigInt values)
         const balance = convertBalanceToString(balanceResult)
@@ -272,8 +228,10 @@ export function useBalanceFetcher(options: {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error)
+        const tokenInfo = tokenAddress ? `:${tokenAddress}` : ''
+        const balanceType = tokenAddress ? 'token' : 'native'
         logError(
-          `Failed to fetch token balance for ${network}:${accountIndex}:${tokenAddress}:`,
+          `Failed to fetch ${balanceType} balance for ${network}:${accountIndex}${tokenInfo}:`,
           error
         )
         BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, false)
@@ -293,6 +251,7 @@ export function useBalanceFetcher(options: {
 
   /**
    * Fetch balance for a specific token (native or ERC20)
+   * Pass null as tokenAddress for native token balance
    */
   const fetchBalance = useCallback(
     async (
@@ -300,13 +259,9 @@ export function useBalanceFetcher(options: {
       accountIndex: number,
       tokenAddress: string | null
     ): Promise<BalanceFetchResult> => {
-      if (tokenAddress === null) {
-        return fetchNativeBalance(network, accountIndex)
-      } else {
-        return fetchTokenBalance(network, accountIndex, tokenAddress)
-      }
+      return fetchBalanceInternal(network, accountIndex, tokenAddress)
     },
-    [fetchNativeBalance, fetchTokenBalance]
+    [fetchBalanceInternal]
   )
 
   /**
@@ -407,23 +362,15 @@ export function useBalanceFetcher(options: {
 
       const allWallets = getAllWallets()
       const tokens = tokenHelpers.getTokensForNetwork(network)
-      const results: BalanceFetchResult[] = []
 
       // Fetch balances for all wallets and tokens in parallel
-      await Promise.all(
-        allWallets.flatMap((wallet: Wallet) =>
-          tokens.map(async (token) => {
-            const result = await fetchBalance(
-              network,
-              wallet.accountIndex,
-              token.address
-            )
-            results.push(result)
-          })
+      const fetchPromises = allWallets.flatMap((wallet: Wallet) =>
+        tokens.map((token) =>
+          fetchBalance(network, wallet.accountIndex, token.address)
         )
       )
 
-      return results
+      return Promise.all(fetchPromises)
     },
     [getAllWallets, fetchBalance, tokenHelpers, getIsInitialized]
   )
@@ -441,29 +388,19 @@ export function useBalanceFetcher(options: {
       }
 
       const tokens = tokenHelpers.getTokensForNetwork(network)
-      const results: BalanceFetchResult[] = []
 
       // Fetch balances for all tokens in parallel
-      await Promise.all(
-        tokens.map(async (token) => {
-          const result = await fetchBalance(
-            network,
-            accountIndex,
-            token.address
-          )
-          results.push(result)
-        })
+      const fetchPromises = tokens.map((token) =>
+        fetchBalance(network, accountIndex, token.address)
       )
 
-      return results
+      return Promise.all(fetchPromises)
     },
     [fetchBalance, tokenHelpers, getIsInitialized]
   )
 
   return {
     // Individual fetch methods
-    fetchNativeBalance,
-    fetchTokenBalance,
     fetchBalance,
 
     // Batch fetch methods

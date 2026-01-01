@@ -22,6 +22,28 @@ export function convertBalanceToString(value: unknown): string {
 }
 
 /**
+ * Recursively convert BigInt values to strings in objects/arrays
+ * Prevents serialization errors when BigInt values are present
+ * 
+ * @param value - Value that may contain BigInt values
+ * @returns Value with all BigInt values converted to strings
+ */
+export function convertBigIntToString(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString()
+  }
+  if (Array.isArray(value)) {
+    return value.map(convertBigIntToString)
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, val]) => [key, convertBigIntToString(val)])
+    )
+  }
+  return value
+}
+
+/**
  * Format a balance from wei/smallest unit to readable format
  *
  * @param balance - Balance as string (from wei/smallest unit)

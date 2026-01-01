@@ -1,8 +1,9 @@
 import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import { createSecureStorage } from '@tetherto/wdk-rn-secure-storage'
-import type { NetworkConfigs } from '../types'
+
 import { getWorkletStore } from '../store/workletStore'
 import { WorkletLifecycleService } from './workletLifecycleService'
+import type { NetworkConfigs } from '../types'
 import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
 import { log } from '../utils/logger'
 

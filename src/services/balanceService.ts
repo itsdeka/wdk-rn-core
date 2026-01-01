@@ -5,9 +5,12 @@
  * This service is focused solely on balance management.
  */
 
-// Local imports
 import { getWalletStore } from '../store/walletStore'
-import { validateAccountIndex, validateNetworkName, validateTokenAddress, validateBalance } from '../utils/validation'
+import { updateBalanceInState } from '../utils/storeHelpers'
+import { validateBalance, validateWalletParams } from '../utils/validation'
+
+// Constants
+const NATIVE_TOKEN_KEY = 'native'
 
 /**
  * Balance Service
@@ -15,6 +18,28 @@ import { validateAccountIndex, validateNetworkName, validateTokenAddress, valida
  * Provides methods for managing wallet balances.
  */
 export class BalanceService {
+  /**
+   * Validate wallet parameters and balance (if provided)
+   * Helper to reduce repetitive validation calls
+   */
+  private static validateBalanceParams(
+    network: string,
+    accountIndex: number,
+    tokenAddress?: string | null,
+    balance?: string
+  ): void {
+    validateWalletParams(network, accountIndex, tokenAddress)
+    if (balance !== undefined) {
+      validateBalance(balance)
+    }
+  }
+
+  /**
+   * Get token key from token address (native or token address)
+   */
+  private static getTokenKey(tokenAddress: string | null): string {
+    return tokenAddress || NATIVE_TOKEN_KEY
+  }
   /**
    * Update balance for a specific wallet, network, and token
    */
@@ -24,26 +49,13 @@ export class BalanceService {
     tokenAddress: string | null,
     balance: string
   ): void {
-    // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
-    validateTokenAddress(tokenAddress)
-    validateBalance(balance)
+    this.validateBalanceParams(network, accountIndex, tokenAddress, balance)
 
     const walletStore = getWalletStore()
-    const tokenKey = tokenAddress || 'native'
+    const tokenKey = this.getTokenKey(tokenAddress)
     
     walletStore.setState((prev) => ({
-      balances: {
-        ...prev.balances,
-        [network]: {
-          ...(prev.balances[network] || {}),
-          [accountIndex]: {
-            ...(prev.balances[network]?.[accountIndex] || {}),
-            [tokenKey]: balance,
-          },
-        },
-      },
+      ...updateBalanceInState(prev, network, accountIndex, tokenKey, balance),
     }))
   }
 
@@ -55,14 +67,11 @@ export class BalanceService {
     network: string,
     tokenAddress: string | null
   ): string | null {
-    // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
-    validateTokenAddress(tokenAddress)
+    this.validateBalanceParams(network, accountIndex, tokenAddress)
 
     const walletStore = getWalletStore()
     const walletState = walletStore.getState()
-    const tokenKey = tokenAddress || 'native'
+    const tokenKey = this.getTokenKey(tokenAddress)
     
     return walletState.balances[network]?.[accountIndex]?.[tokenKey] || null
   }
@@ -75,8 +84,7 @@ export class BalanceService {
     network: string
   ): Record<string, string> | null {
     // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
+    validateWalletParams(network, accountIndex)
 
     const walletStore = getWalletStore()
     const walletState = walletStore.getState()
@@ -93,13 +101,10 @@ export class BalanceService {
     tokenAddress: string | null,
     loading: boolean
   ): void {
-    // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
-    validateTokenAddress(tokenAddress)
+    this.validateBalanceParams(network, accountIndex, tokenAddress)
 
     const walletStore = getWalletStore()
-    const tokenKey = tokenAddress || 'native'
+    const tokenKey = this.getTokenKey(tokenAddress)
     const loadingKey = `${network}-${accountIndex}-${tokenKey}`
     
     walletStore.setState((prev) => {
@@ -127,14 +132,11 @@ export class BalanceService {
     accountIndex: number,
     tokenAddress: string | null
   ): boolean {
-    // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
-    validateTokenAddress(tokenAddress)
+    this.validateBalanceParams(network, accountIndex, tokenAddress)
 
     const walletStore = getWalletStore()
     const walletState = walletStore.getState()
-    const tokenKey = tokenAddress || 'native'
+    const tokenKey = this.getTokenKey(tokenAddress)
     const loadingKey = `${network}-${accountIndex}-${tokenKey}`
     
     return walletState.balanceLoading[loadingKey] || false
@@ -148,8 +150,7 @@ export class BalanceService {
     accountIndex: number
   ): void {
     // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
+    validateWalletParams(network, accountIndex)
 
     const walletStore = getWalletStore()
     const now = Date.now()
@@ -173,8 +174,7 @@ export class BalanceService {
     accountIndex: number
   ): number | null {
     // Validate inputs
-    validateAccountIndex(accountIndex)
-    validateNetworkName(network)
+    validateWalletParams(network, accountIndex)
 
     const walletStore = getWalletStore()
     const walletState = walletStore.getState()

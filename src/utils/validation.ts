@@ -111,3 +111,23 @@ export function validateBalance(balance: string): void {
   }
 }
 
+/**
+ * Validate wallet parameters (network, accountIndex, optional tokenAddress)
+ * Convenience function to validate common wallet operation parameters
+ * 
+ * @param network - Network name
+ * @param accountIndex - Account index
+ * @param tokenAddress - Optional token address (null for native tokens)
+ */
+export function validateWalletParams(
+  network: string,
+  accountIndex: number,
+  tokenAddress?: string | null
+): void {
+  validateNetworkName(network)
+  validateAccountIndex(accountIndex)
+  if (tokenAddress !== undefined) {
+    validateTokenAddress(tokenAddress)
+  }
+}
+

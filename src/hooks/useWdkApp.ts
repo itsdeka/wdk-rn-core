@@ -19,6 +19,7 @@
  */
 
 import { useContext } from 'react'
+
 import { WdkAppContext } from '../provider/WdkAppProvider'
 import type { WdkAppContextValue } from '../provider/WdkAppProvider'
 

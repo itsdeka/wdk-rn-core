@@ -5,12 +5,11 @@
  * This service is focused solely on address management.
  */
 
-// Local imports
-import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
-import { logError } from '../utils/logger'
-import { normalizeError } from '../utils/errorUtils'
-import { isValidNetworkName, isValidAccountIndex, isValidAddress } from '../utils/typeGuards'
+import { handleServiceError } from '../utils/errorHandling'
+import { requireInitialized, updateAddressInState } from '../utils/storeHelpers'
+import { isValidAddress } from '../utils/typeGuards'
+import { validateAccountIndex, validateNetworkName } from '../utils/validation'
 
 /**
  * Address Service
@@ -26,19 +25,14 @@ export class AddressService {
     network: string,
     accountIndex = 0
   ): Promise<string> {
-    // Runtime validation using type guards
-    if (!isValidNetworkName(network)) {
-      throw new Error('network must be a valid network name (non-empty string with alphanumeric characters, hyphens, and underscores)')
-    }
-    if (!isValidAccountIndex(accountIndex)) {
-      throw new Error('accountIndex must be a non-negative integer')
-    }
+    // Validate inputs
+    validateNetworkName(network)
+    validateAccountIndex(accountIndex)
 
-    const workletStore = getWorkletStore()
     const walletStore = getWalletStore()
-    const workletState = workletStore.getState()
     const walletState = walletStore.getState()
 
+    // Check cache first
     const cachedAddress = walletState.addresses[network]?.[accountIndex]
     if (cachedAddress) {
       // Validate cached address format
@@ -48,9 +42,8 @@ export class AddressService {
       return cachedAddress
     }
 
-    if (!workletState.isInitialized || !workletState.hrpc) {
-      throw new Error('WDK not initialized')
-    }
+    // Require initialized worklet
+    const hrpc = requireInitialized()
 
     const loadingKey = `${network}-${accountIndex}`
     
@@ -59,14 +52,8 @@ export class AddressService {
         walletLoading: { ...prev.walletLoading, [loadingKey]: true },
       }))
 
-      // Get fresh state to ensure hrpc is still available
-      const currentWorkletState = workletStore.getState()
-      if (!currentWorkletState.hrpc) {
-        throw new Error('HRPC instance not available')
-      }
-
       // Call getAddress method on the account
-      const response = await currentWorkletState.hrpc.callMethod({
+      const response = await hrpc.callMethod({
         methodName: 'getAddress',
         network,
         accountIndex,
@@ -92,15 +79,9 @@ export class AddressService {
         throw new Error(`Failed to parse address from worklet response: ${error instanceof Error ? error.message : String(error)}`)
       }
 
-      // Cache the address
+      // Cache the address using helper
       walletStore.setState((prev) => ({
-        addresses: {
-          ...prev.addresses,
-          [network]: {
-            ...(prev.addresses[network] || {}),
-            [accountIndex]: address,
-          },
-        },
+        ...updateAddressInState(prev, network, accountIndex, address),
         walletLoading: { ...prev.walletLoading, [loadingKey]: false },
       }))
 
@@ -109,12 +90,7 @@ export class AddressService {
       walletStore.setState((prev) => ({
         walletLoading: { ...prev.walletLoading, [loadingKey]: false },
       }))
-      const normalizedError = normalizeError(error, false, { 
-        component: 'AddressService', 
-        operation: 'getAddress'
-      })
-      logError('[AddressService] Failed to get address:', normalizedError)
-      throw normalizedError
+      handleServiceError(error, 'AddressService', 'getAddress', { network, accountIndex })
     }
   }
 }

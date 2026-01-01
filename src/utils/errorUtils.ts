@@ -212,3 +212,33 @@ export function createContextualError(
   return error
 }
 
+/**
+ * Check if an error is an authentication error
+ * Used to prevent automatic retries when authentication fails
+ * 
+ * @param error - Error to check
+ * @returns true if the error is an authentication error
+ */
+export function isAuthenticationError(error: unknown): boolean {
+  // Check if it's an AuthenticationError instance from secure storage
+  if (error && typeof error === 'object' && 'constructor' in error) {
+    const errorName = error.constructor.name
+    if (errorName === 'AuthenticationError') {
+      return true
+    }
+  }
+
+  // Check if it's an Error instance with authentication-related properties
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase()
+    return (
+      error.name === 'AuthenticationError' ||
+      msg.includes('authentication') ||
+      msg.includes('biometric') ||
+      msg.includes('authentication required but failed')
+    )
+  }
+
+  return false
+}
+
