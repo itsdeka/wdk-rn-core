@@ -161,12 +161,25 @@ export function useWdkInitialization(
 
   // Initialize worklet when component mounts or when reset
   useEffect(() => {
+    log('[useWdkInitialization] Checking initialization conditions', {
+      stateType: state.type,
+      isWorkletInitialized,
+      isWorkletLoading,
+      enabled,
+    })
+    
     if (
       state.type !== 'idle' ||
       isWorkletInitialized ||
       isWorkletLoading ||
       !enabled
     ) {
+      log('[useWdkInitialization] Initialization skipped', {
+        reason: state.type !== 'idle' ? 'state not idle' :
+                isWorkletInitialized ? 'already initialized' :
+                isWorkletLoading ? 'already loading' :
+                !enabled ? 'not enabled' : 'unknown'
+      })
       return
     }
 

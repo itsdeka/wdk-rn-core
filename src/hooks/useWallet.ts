@@ -1,3 +1,5 @@
+import { useShallow } from 'zustand/react/shallow'
+
 import { AccountService } from '../services/accountService'
 import { AddressService } from '../services/addressService'
 import { BalanceService } from '../services/balanceService'
@@ -73,13 +75,15 @@ export function useWallet(): UseWalletResult {
   const walletStore = getWalletStore()
 
   // Subscribe to state changes using consolidated selectors to minimize re-renders
-  const walletState = walletStore((state: WalletStore) => ({
+  // Use useShallow to prevent infinite loops when selector returns new object
+  const walletSelector = useShallow((state: WalletStore) => ({
     addresses: state.addresses,
     walletLoading: state.walletLoading,
     balances: state.balances,
     balanceLoading: state.balanceLoading,
     lastBalanceUpdate: state.lastBalanceUpdate,
   }))
+  const walletState = walletStore(walletSelector)
   const isInitialized = workletStore((state: WorkletStore) => state.isInitialized)
 
   // Get all addresses for a specific network
