@@ -2,6 +2,21 @@
  * Jest setup file for test configuration
  */
 
+// Mock React (required by zustand/react)
+jest.mock('react', () => ({
+  useState: jest.fn((initial) => [initial, jest.fn()]),
+  useEffect: jest.fn((fn) => fn()),
+  useRef: jest.fn((initial) => ({ current: initial })),
+  useCallback: jest.fn((fn) => fn),
+  useMemo: jest.fn((fn) => fn()),
+  useContext: jest.fn(),
+  createContext: jest.fn(() => ({ Provider: {}, Consumer: {} })),
+  Fragment: {},
+  StrictMode: {},
+  version: '18.2.0',
+  default: {},
+}))
+
 // Mock React Native modules
 jest.mock('react-native-mmkv', () => ({
   MMKV: jest.fn().mockImplementation(() => ({
