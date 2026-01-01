@@ -1,11 +1,10 @@
-import { useCallback, useMemo } from 'react'
 
 import { AccountService } from '../services/accountService'
 import { AddressService } from '../services/addressService'
 import { BalanceService } from '../services/balanceService'
 import { getWalletStore } from '../store/walletStore'
-import { getWorkletStore } from '../store/workletStore'
 import type { WalletStore } from '../store/walletStore'
+import { getWorkletStore } from '../store/workletStore'
 import type { WorkletStore } from '../store/workletStore'
 
 /**
@@ -83,66 +82,63 @@ export function useWallet(): UseWalletResult {
   const balanceLoading = walletStore((state: WalletStore) => state.balanceLoading)
   const lastBalanceUpdate = walletStore((state: WalletStore) => state.lastBalanceUpdate)
 
-  // Get all addresses for a specific network (memoized)
-  const getNetworkAddresses = useCallback((network: string) => {
+  // Get all addresses for a specific network
+  const getNetworkAddresses = (network: string) => {
     return addresses[network] || {}
-  }, [addresses])
+  }
 
-  // Check if an address is loading (memoized)
-  const isLoadingAddress = useCallback((network: string, accountIndex: number = 0) => {
+  // Check if an address is loading
+  const isLoadingAddress = (network: string, accountIndex: number = 0) => {
     return walletLoading[`${network}-${accountIndex}`] || false
-  }, [walletLoading])
+  }
 
-  // Get a specific address (from cache or fetch) - memoized
-  const getAddress = useCallback(async (network: string, accountIndex: number = 0) => {
+  // Get a specific address (from cache or fetch)
+  const getAddress = async (network: string, accountIndex: number = 0) => {
     return AddressService.getAddress(network, accountIndex)
-  }, [])
+  }
 
-  // Call a method on a wallet account - memoized
-  const callAccountMethod = useCallback(async <T = unknown>(
+  // Call a method on a wallet account
+  const callAccountMethod = async <T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
     args?: unknown
   ): Promise<T> => {
     return AccountService.callAccountMethod<T>(network, accountIndex, methodName, args)
-  }, [])
+  }
 
-  // Balance management methods - memoized
-  const updateBalance = useCallback((accountIndex: number, network: string, tokenAddress: string | null, balance: string) => {
+  // Balance management methods - direct calls to static service methods
+  const updateBalance = (accountIndex: number, network: string, tokenAddress: string | null, balance: string) => {
     BalanceService.updateBalance(accountIndex, network, tokenAddress, balance)
-  }, [])
+  }
 
-  const getBalance = useCallback((accountIndex: number, network: string, tokenAddress: string | null) => {
+  const getBalance = (accountIndex: number, network: string, tokenAddress: string | null) => {
     return BalanceService.getBalance(accountIndex, network, tokenAddress)
-  }, [])
+  }
 
-  const getBalancesForWallet = useCallback((accountIndex: number, network: string) => {
+  const getBalancesForWallet = (accountIndex: number, network: string) => {
     return BalanceService.getBalancesForWallet(accountIndex, network)
-  }, [])
+  }
 
-  const setBalanceLoading = useCallback((network: string, accountIndex: number, tokenAddress: string | null, loading: boolean) => {
+  const setBalanceLoading = (network: string, accountIndex: number, tokenAddress: string | null, loading: boolean) => {
     BalanceService.setBalanceLoading(network, accountIndex, tokenAddress, loading)
-  }, [])
+  }
 
-  const isBalanceLoading = useCallback((network: string, accountIndex: number, tokenAddress: string | null) => {
+  const isBalanceLoading = (network: string, accountIndex: number, tokenAddress: string | null) => {
     return BalanceService.isBalanceLoading(network, accountIndex, tokenAddress)
-  }, [])
+  }
 
-  const updateLastBalanceUpdate = useCallback((network: string, accountIndex: number) => {
+  const updateLastBalanceUpdate = (network: string, accountIndex: number) => {
     BalanceService.updateLastBalanceUpdate(network, accountIndex)
-  }, [])
+  }
 
-  const getLastBalanceUpdate = useCallback((network: string, accountIndex: number) => {
+  const getLastBalanceUpdate = (network: string, accountIndex: number) => {
     return BalanceService.getLastBalanceUpdate(network, accountIndex)
-  }, [])
+  }
 
-  const clearBalances = useCallback(() => {
+  const clearBalances = () => {
     BalanceService.clearBalances()
-  }, [])
-
-  // All callbacks are already memoized, so we can return the object directly
-  // The object reference will only change when dependencies actually change
+  }
   return {
     // State (reactive)
     addresses,

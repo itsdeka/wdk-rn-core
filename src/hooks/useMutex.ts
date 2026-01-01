@@ -71,7 +71,7 @@ export function useMutex(options: UseMutexOptions = {}): MutexAcquire {
     }
   }, [])
 
-  const acquire = useCallback(async (fn: () => Promise<void>): Promise<void> => {
+  const acquireFn = useCallback(async (fn: () => Promise<void>): Promise<void> => {
     if (options.queue && lockedRef.current) {
       // Queue the operation
       return new Promise<void>((resolve, reject) => {
@@ -100,12 +100,14 @@ export function useMutex(options: UseMutexOptions = {}): MutexAcquire {
     } finally {
       lockedRef.current = false
     }
-  }, [options.queue, processQueue]) as MutexAcquire
+  }, [options.queue, processQueue])
 
-  // Add isLocked method
-  acquire.isLocked = useCallback(() => {
+  const isLocked = useCallback(() => {
     return lockedRef.current
   }, [])
+
+  // Create object that implements MutexAcquire interface
+  const acquire: MutexAcquire = Object.assign(acquireFn, { isLocked })
 
   return acquire
 }

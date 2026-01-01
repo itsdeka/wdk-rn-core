@@ -102,6 +102,47 @@ export class WalletSetupService {
     
     log('✅ Credentials cached in memory', { hasIdentifier: !!identifier })
   }
+
+  /**
+   * Generic helper to retrieve a credential value (checks cache first, then secureStorage)
+   */
+  private static async getCredential<T extends 'encryptionKey' | 'encryptedSeed' | 'encryptedEntropy'>(
+    identifier: string | undefined,
+    credentialType: T,
+    fetchFn: (identifier?: string) => Promise<string | null>,
+    cacheKey: keyof CachedCredentials
+  ): Promise<string | null> {
+    const secureStorage = this.getSecureStorage()
+    const cacheKeyStr = this.getCacheKey(identifier)
+    const cached = this.credentialsCache.get(cacheKeyStr)
+
+    if (cached?.[cacheKey]) {
+      const logMessage = credentialType === 'encryptionKey' 
+        ? '✅ Encryption key retrieved from cache (no biometrics needed)'
+        : `✅ ${credentialType} retrieved from cache`
+      log(logMessage)
+      return cached[cacheKey] as string
+    }
+
+    if (credentialType === 'encryptionKey') {
+      log('Encryption key not in cache, fetching from secureStorage...')
+    }
+
+    const value = await fetchFn(identifier)
+
+    if (value) {
+      // Cache it for future use
+      if (credentialType === 'encryptionKey') {
+        this.cacheCredentials(identifier, value)
+      } else if (credentialType === 'encryptedSeed') {
+        this.cacheCredentials(identifier, undefined, value)
+      } else {
+        this.cacheCredentials(identifier, undefined, undefined, value)
+      }
+    }
+
+    return value
+  }
   /**
    * Create a new wallet
    * Generates entropy, encrypts it, and stores credentials securely
@@ -384,24 +425,15 @@ export class WalletSetupService {
     identifier?: string
   ): Promise<string | null> {
     const secureStorage = this.getSecureStorage()
-    const cacheKey = this.getCacheKey(identifier)
-    const cached = this.credentialsCache.get(cacheKey)
-
-    if (cached?.encryptionKey) {
-      log('✅ Encryption key retrieved from cache (no biometrics needed)')
-      return cached.encryptionKey
-    }
-
-    log('Encryption key not in cache, fetching from secureStorage...')
-    const allEncrypted = await secureStorage.getAllEncrypted(identifier)
-    const encryptionKey = allEncrypted.encryptionKey || null
-
-    if (encryptionKey) {
-      // Cache it for future use
-      this.cacheCredentials(identifier, encryptionKey)
-    }
-
-    return encryptionKey
+    return this.getCredential(
+      identifier,
+      'encryptionKey',
+      async (id) => {
+        const allEncrypted = await secureStorage.getAllEncrypted(id)
+        return allEncrypted.encryptionKey || null
+      },
+      'encryptionKey'
+    )
   }
 
   /**
@@ -411,22 +443,12 @@ export class WalletSetupService {
     identifier?: string
   ): Promise<string | null> {
     const secureStorage = this.getSecureStorage()
-    const cacheKey = this.getCacheKey(identifier)
-    const cached = this.credentialsCache.get(cacheKey)
-
-    if (cached?.encryptedSeed) {
-      log('✅ Encrypted seed retrieved from cache')
-      return cached.encryptedSeed
-    }
-
-    const encryptedSeed = await secureStorage.getEncryptedSeed(identifier)
-
-    if (encryptedSeed) {
-      // Cache it for future use
-      this.cacheCredentials(identifier, undefined, encryptedSeed)
-    }
-
-    return encryptedSeed || null
+    return this.getCredential(
+      identifier,
+      'encryptedSeed',
+      (id) => secureStorage.getEncryptedSeed(id),
+      'encryptedSeed'
+    )
   }
 
   /**
@@ -436,22 +458,12 @@ export class WalletSetupService {
     identifier?: string
   ): Promise<string | null> {
     const secureStorage = this.getSecureStorage()
-    const cacheKey = this.getCacheKey(identifier)
-    const cached = this.credentialsCache.get(cacheKey)
-
-    if (cached?.encryptedEntropy) {
-      log('✅ Encrypted entropy retrieved from cache')
-      return cached.encryptedEntropy
-    }
-
-    const encryptedEntropy = await secureStorage.getEncryptedEntropy(identifier)
-
-    if (encryptedEntropy) {
-      // Cache it for future use
-      this.cacheCredentials(identifier, undefined, undefined, encryptedEntropy)
-    }
-
-    return encryptedEntropy || null
+    return this.getCredential(
+      identifier,
+      'encryptedEntropy',
+      (id) => secureStorage.getEncryptedEntropy(id),
+      'encryptedEntropy'
+    )
   }
 
   /**

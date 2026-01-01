@@ -13,7 +13,6 @@
 import { useCallback, useMemo } from 'react'
 
 import { AccountService } from '../services/accountService'
-import { AddressService } from '../services/addressService'
 import { BalanceService } from '../services/balanceService'
 import { getWalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
@@ -129,8 +128,8 @@ export function useBalanceFetcher(options: {
   }
   
   // Validate walletStore has required Zustand methods
-  // Note: getAllWallets, callAccountMethod, and isWalletInitialized are not methods on walletStore
-  // They are provided by helper functions and services (getAllWalletsFromWalletStore, AddressService)
+  // Note: getAllWallets is not a method on walletStore
+  // It is provided by helper function getAllWalletsFromWalletStore
   if (typeof walletStore.getState !== 'function') {
     throw new Error(
       '[useBalanceFetcher] walletStore must be a valid Zustand store with getState method'
@@ -168,10 +167,11 @@ export function useBalanceFetcher(options: {
   )
 
   /**
-   * Internal function to fetch balance (native or token)
+   * Fetch balance for a specific token (native or ERC20)
    * Handles both native and ERC20 token balances with shared logic
+   * Pass null as tokenAddress for native token balance
    */
-  const fetchBalanceInternal = useCallback(
+  const fetchBalance = useCallback(
     async (
       network: string,
       accountIndex: number,
@@ -195,20 +195,12 @@ export function useBalanceFetcher(options: {
         const methodName = isNative ? ACCOUNT_METHOD_GET_BALANCE : ACCOUNT_METHOD_GET_TOKEN_BALANCE
         const methodArg = isNative ? null : tokenAddress
 
-        if (isNative) {
-          log(`[BalanceFetcher] Calling ${ACCOUNT_METHOD_GET_BALANCE} for ${network}:${accountIndex}...`)
-        }
-
         const balanceResult = await AccountService.callAccountMethod<string>(
           network,
           accountIndex,
           methodName,
           methodArg
         )
-
-        if (isNative) {
-          log(`[BalanceFetcher] ${ACCOUNT_METHOD_GET_BALANCE} result for ${network}:${accountIndex}:`, balanceResult)
-        }
 
         // Convert to string (handles BigInt values)
         const balance = convertBalanceToString(balanceResult)
@@ -247,21 +239,6 @@ export function useBalanceFetcher(options: {
       }
     },
     [getIsInitialized]
-  )
-
-  /**
-   * Fetch balance for a specific token (native or ERC20)
-   * Pass null as tokenAddress for native token balance
-   */
-  const fetchBalance = useCallback(
-    async (
-      network: string,
-      accountIndex: number,
-      tokenAddress: string | null
-    ): Promise<BalanceFetchResult> => {
-      return fetchBalanceInternal(network, accountIndex, tokenAddress)
-    },
-    [fetchBalanceInternal]
   )
 
   /**

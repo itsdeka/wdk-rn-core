@@ -233,8 +233,6 @@ export class WorkletLifecycleService {
         wdkInitResult,
         error: null,
       })
-
-      
     } catch (error) {
       this.handleErrorWithStateUpdate(
         error,
@@ -409,30 +407,14 @@ export class WorkletLifecycleService {
    * Safely extracts status from result object
    */
   private static extractWdkInitResult(result: unknown): { status?: string | null } | null {
-    if (result !== null && typeof result === 'object' && 'status' in result) {
-      return { status: (result as { status?: string | null }).status }
+    if (result !== null && typeof result === 'object' && result !== null && 'status' in result) {
+      const resultObj = result as { status?: unknown }
+      const status = resultObj.status
+      if (status === null || status === undefined || typeof status === 'string') {
+        return { status: status ?? null }
+      }
     }
     return null
-  }
-
-  /**
-   * Get reset state for worklet store
-   */
-  private static getResetWorkletState() {
-    return {
-      worklet: null,
-      hrpc: null,
-      ipc: null,
-      isWorkletStarted: false,
-      isInitialized: false,
-      isLoading: false,
-      error: null,
-      encryptedSeed: null,
-      encryptionKey: null,
-      networkConfigs: null,
-      workletStartResult: null,
-      wdkInitResult: null,
-    }
   }
 
   /**
@@ -455,7 +437,20 @@ export class WorkletLifecycleService {
     const workletStore = getWorkletStore()
     const walletStore = getWalletStore()
 
-    workletStore.setState(this.getResetWorkletState())
+    workletStore.setState({
+      worklet: null,
+      hrpc: null,
+      ipc: null,
+      isWorkletStarted: false,
+      isInitialized: false,
+      isLoading: false,
+      error: null,
+      encryptedSeed: null,
+      encryptionKey: null,
+      networkConfigs: null,
+      workletStartResult: null,
+      wdkInitResult: null,
+    })
     walletStore.setState(this.getResetWalletState())
   }
 

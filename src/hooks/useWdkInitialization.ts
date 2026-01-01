@@ -9,16 +9,16 @@
  * Uses a state machine pattern to simplify complex initialization logic
  */
 
-import { useCallback, useEffect, useMemo, useRef, useReducer } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 
 import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 
 import { useWallet } from './useWallet'
 import { useWalletSetup } from './useWalletSetup'
 import { useWorklet } from './useWorklet'
+import type { NetworkConfigs } from '../types'
 import { isAuthenticationError, normalizeError } from '../utils/errorUtils'
 import { log, logError } from '../utils/logger'
-import type { NetworkConfigs } from '../types'
 
 export interface UseWdkInitializationResult {
   /** Whether wallet exists in secure storage (null = checking) */
