@@ -4,11 +4,11 @@
  * Helper functions for working with wallets and retrieving addresses from walletStore.
  */
 
+import { AccountService } from '../services/accountService'
+import { getWalletStore } from '../store/walletStore'
+import { getWorkletStore } from '../store/workletStore'
 import type { WalletStore as WalletStoreType } from '../store/walletStore'
 import type { WalletStore } from '../types'
-import { AccountService } from '../services/accountService'
-import { getWorkletStore } from '../store/workletStore'
-import { getWalletStore } from '../store/walletStore'
 
 /**
  * Get addresses for a wallet from walletStore

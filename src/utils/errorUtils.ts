@@ -44,6 +44,74 @@ function isSafePattern(text: string): boolean {
 }
 
 /**
+ * Mask sensitive string patterns (hex/base64) for development mode
+ */
+function maskSensitiveStrings(message: string): string {
+  return message
+    .replace(/\b0x?[a-f0-9]{32,}\b/gi, (match) => {
+      if (match.length <= 20) return match
+      return `${match.substring(0, 8)}...${match.substring(match.length - 4)}`
+    })
+    .replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, (match) => {
+      return `${match.substring(0, 8)}...${match.substring(match.length - 4)}`
+    })
+}
+
+/**
+ * Remove file paths from error messages
+ */
+function removeFilePaths(message: string): string {
+  return message
+    .replace(/file:\/\/[^\s]+/gi, '[file path]')
+    .replace(/\/[^\s]+\/[^\s]+/g, '[path]')
+}
+
+/**
+ * Get replacement text for a sensitive pattern match
+ */
+function getSensitiveReplacement(match: string): string {
+  const lowerMatch = match.toLowerCase()
+  if (lowerMatch.includes('encryption') || lowerMatch.includes('encrypted')) {
+    return '[encryption data]'
+  }
+  if (lowerMatch.includes('mnemonic') || lowerMatch.includes('seed phrase')) {
+    return '[mnemonic phrase]'
+  }
+  if (lowerMatch.includes('key') && !lowerMatch.includes('public')) {
+    return '[key]'
+  }
+  if (lowerMatch.includes('token')) {
+    return '[token]'
+  }
+  if (lowerMatch.includes('password')) {
+    return '[password]'
+  }
+  if (lowerMatch.includes('secret')) {
+    return '[secret]'
+  }
+  if (/[a-f0-9]{32,}/i.test(match) || /[A-Za-z0-9+/]{40,}/.test(match)) {
+    return '[sensitive data]'
+  }
+  return '[sensitive]'
+}
+
+/**
+ * Apply sensitive pattern sanitization
+ */
+function applySensitivePatternSanitization(message: string): string {
+  let sanitized = message
+  for (const pattern of SENSITIVE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, (match) => {
+      if (isSafePattern(match)) {
+        return match
+      }
+      return getSensitiveReplacement(match)
+    })
+  }
+  return sanitized
+}
+
+/**
  * Sanitize error message to prevent information leakage
  * Removes or masks sensitive information while preserving useful debugging info
  * 
@@ -58,70 +126,13 @@ export function sanitizeErrorMessage(
   context?: { operation?: string; component?: string }
 ): string {
   if (isDevelopment) {
-    // In development, allow more detailed messages but still sanitize obvious secrets
-    let sanitized = message
-    
-    // Mask long hex strings that might be keys (but preserve some info for debugging)
-    sanitized = sanitized.replace(/\b0x?[a-f0-9]{32,}\b/gi, (match) => {
-      if (match.length <= 20) return match // Short hex strings are probably not keys
-      return `${match.substring(0, 8)}...${match.substring(match.length - 4)}`
-    })
-    
-    // Mask base64 strings that look like keys
-    sanitized = sanitized.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, (match) => {
-      return `${match.substring(0, 8)}...${match.substring(match.length - 4)}`
-    })
-    
-    return sanitized
+    return maskSensitiveStrings(message)
   }
 
   // In production, be more aggressive with sanitization
-  let sanitized = message
-
-  // Remove file paths (but preserve error type information)
-  sanitized = sanitized.replace(/file:\/\/[^\s]+/gi, '[file path]')
-  sanitized = sanitized.replace(/\/[^\s]+\/[^\s]+/g, '[path]')
-
-  // Context-aware sanitization: check if this is a known safe context
-  const isKnownSafeContext = context?.operation === 'validation' || 
-                            context?.component === 'ErrorBoundary'
-
-  // Apply sensitive pattern sanitization
-  for (const pattern of SENSITIVE_PATTERNS) {
-    sanitized = sanitized.replace(pattern, (match, ...groups) => {
-      // Skip if this matches a safe pattern
-      if (isSafePattern(match)) {
-        return match
-      }
-      
-      // Determine replacement based on what was matched
-      const lowerMatch = match.toLowerCase()
-      if (lowerMatch.includes('encryption') || lowerMatch.includes('encrypted')) {
-        return '[encryption data]'
-      }
-      if (lowerMatch.includes('mnemonic') || lowerMatch.includes('seed phrase')) {
-        return '[mnemonic phrase]'
-      }
-      if (lowerMatch.includes('key') && !lowerMatch.includes('public')) {
-        return '[key]'
-      }
-      if (lowerMatch.includes('token')) {
-        return '[token]'
-      }
-      if (lowerMatch.includes('password')) {
-        return '[password]'
-      }
-      if (lowerMatch.includes('secret')) {
-        return '[secret]'
-      }
-      // For hex/base64 strings, mask them
-      if (/[a-f0-9]{32,}/i.test(match) || /[A-Za-z0-9+/]{40,}/.test(match)) {
-        return '[sensitive data]'
-      }
-      return '[sensitive]'
-    })
-  }
-
+  let sanitized = removeFilePaths(message)
+  sanitized = applySensitivePatternSanitization(sanitized)
+  
   // Additional cleanup: remove any remaining long hex/base64 strings
   sanitized = sanitized.replace(/\b0x?[a-f0-9]{32,}\b/gi, '[hex string]')
   sanitized = sanitized.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, '[base64 string]')

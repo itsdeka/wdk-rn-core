@@ -16,9 +16,9 @@ import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import { useWallet } from './useWallet'
 import { useWalletSetup } from './useWalletSetup'
 import { useWorklet } from './useWorklet'
-import type { NetworkConfigs } from '../types'
 import { isAuthenticationError, normalizeError } from '../utils/errorUtils'
 import { log, logError } from '../utils/logger'
+import type { NetworkConfigs } from '../types'
 
 export interface UseWdkInitializationResult {
   /** Whether wallet exists in secure storage (null = checking) */
@@ -312,24 +312,13 @@ export function useWdkInitialization(
 
   // Calculate isInitializing based on state
   const isInitializing = useMemo(() => {
-    if (!enabled) {
-      return false
-    }
+    if (!enabled) return false
+    if (isWorkletLoading || isWalletInitializing) return true
 
-    const isInProgressState =
-      state.type === 'starting_worklet' ||
-      state.type === 'checking_wallet' ||
-      state.type === 'initializing_wallet'
+    const inProgressStates = ['starting_worklet', 'checking_wallet', 'initializing_wallet'] as const
+    if (inProgressStates.includes(state.type as typeof inProgressStates[number])) return true
 
-    const isWaitingForWalletCheck =
-      !stateContext.walletExists && isWorkletStarted && state.type === 'idle'
-
-    return (
-      isInProgressState ||
-      isWorkletLoading ||
-      isWalletInitializing ||
-      isWaitingForWalletCheck
-    )
+    return !stateContext.walletExists && isWorkletStarted && state.type === 'idle'
   }, [
     enabled,
     state.type,

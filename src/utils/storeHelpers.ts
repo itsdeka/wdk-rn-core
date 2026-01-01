@@ -5,8 +5,9 @@
  * to reduce code duplication across services.
  */
 
-import { getWorkletStore } from '../store/workletStore'
 import type { HRPC } from 'pear-wrk-wdk'
+
+import { getWorkletStore } from '../store/workletStore'
 import { asExtendedHRPC } from '../types/hrpc'
 import type { WalletState } from '../store/walletStore'
 

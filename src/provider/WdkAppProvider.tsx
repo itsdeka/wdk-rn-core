@@ -18,11 +18,11 @@ import { createSecureStorage } from '@tetherto/wdk-rn-secure-storage'
 import { useWdkBalanceSync } from '../hooks/useWdkBalanceSync'
 import { useWdkInitialization } from '../hooks/useWdkInitialization'
 import { WalletSetupService } from '../services/walletSetupService'
-import type { NetworkConfigs, TokenConfigs } from '../types'
 import { DEFAULT_BALANCE_REFRESH_INTERVAL_MS } from '../utils/constants'
 import { normalizeError } from '../utils/errorUtils'
 import { logError } from '../utils/logger'
 import { validateBalanceRefreshInterval, validateNetworkConfigs, validateTokenConfigs } from '../utils/validation'
+import type { NetworkConfigs, TokenConfigs } from '../types'
 
 
 /**

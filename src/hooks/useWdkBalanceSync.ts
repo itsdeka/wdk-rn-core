@@ -11,10 +11,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getWalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
+import { log, logError } from '../utils/logger'
 import { useBalanceFetcher } from './useBalanceFetcher'
 import { useMutex } from './useMutex'
 import type { TokenConfigs } from '../types'
-import { log, logError } from '../utils/logger'
 
 export interface UseWdkBalanceSyncResult {
   /** Balance fetching is in progress */

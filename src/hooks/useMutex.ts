@@ -107,7 +107,8 @@ export function useMutex(options: UseMutexOptions = {}): MutexAcquire {
   }, [])
 
   // Create object that implements MutexAcquire interface
-  const acquire: MutexAcquire = Object.assign(acquireFn, { isLocked })
+  const acquire = acquireFn as MutexAcquire
+  acquire.isLocked = isLocked
 
   return acquire
 }

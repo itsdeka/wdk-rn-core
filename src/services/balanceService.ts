@@ -7,10 +7,8 @@
 
 import { getWalletStore } from '../store/walletStore'
 import { updateBalanceInState } from '../utils/storeHelpers'
+import { NATIVE_TOKEN_KEY } from '../utils/constants'
 import { validateBalance, validateWalletParams } from '../utils/validation'
-
-// Constants
-const NATIVE_TOKEN_KEY = 'native'
 
 /**
  * Balance Service
@@ -107,21 +105,13 @@ export class BalanceService {
     const tokenKey = this.getTokenKey(tokenAddress)
     const loadingKey = `${network}-${accountIndex}-${tokenKey}`
     
-    walletStore.setState((prev) => {
-      if (loading) {
-        return {
-          balanceLoading: {
-            ...prev.balanceLoading,
-            [loadingKey]: true,
-          },
-        }
-      } else {
-        const { [loadingKey]: _, ...rest } = prev.balanceLoading
-        return {
-          balanceLoading: rest,
-        }
-      }
-    })
+    walletStore.setState((prev) => ({
+      balanceLoading: loading
+        ? { ...prev.balanceLoading, [loadingKey]: true }
+        : Object.fromEntries(
+            Object.entries(prev.balanceLoading).filter(([key]) => key !== loadingKey)
+          ),
+    }))
   }
 
   /**

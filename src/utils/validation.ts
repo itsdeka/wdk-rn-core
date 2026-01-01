@@ -5,7 +5,6 @@
  * For type guards (boolean returns), see typeGuards.ts
  */
 
-import type { NetworkConfigs, TokenConfigs } from '../types'
 import { 
   isNetworkConfig, 
   isNetworkConfigs, 
@@ -16,6 +15,7 @@ import {
   isValidBalanceString,
   isEthereumAddress
 } from './typeGuards'
+import type { NetworkConfigs, TokenConfigs } from '../types'
 
 /**
  * Validate network configuration

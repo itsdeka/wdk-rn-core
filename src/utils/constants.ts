@@ -33,4 +33,21 @@ export const MNEMONIC_WORD_COUNTS = {
  */
 export const DEFAULT_MNEMONIC_WORD_COUNT = MNEMONIC_WORD_COUNTS.TWELVE
 
+/**
+ * Account method names for balance operations
+ */
+export const ACCOUNT_METHOD_GET_BALANCE = 'getBalance'
+export const ACCOUNT_METHOD_GET_TOKEN_BALANCE = 'getTokenBalance'
+
+/**
+ * Wallet identifier constants
+ */
+export const WALLET_IDENTIFIER_PREFIX = 'wallet-'
+export const MAIN_WALLET_NAME = 'Main Wallet'
+export const WALLET_NAME_PREFIX = 'Wallet '
+
+/**
+ * Token key for native tokens in balance storage
+ */
+export const NATIVE_TOKEN_KEY = 'native'
 

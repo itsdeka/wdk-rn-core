@@ -47,7 +47,7 @@
   "author": "Tetherto",
   "license": "Apache-2.0",
   "dependencies": {
-    "@tetherto/wdk-rn-secure-storage": "github:itsdeka/wdk-rn-secure-storage#b291ff8cf4542676159c99965ea4a0fa6706b493",
+    "@tetherto/wdk-rn-secure-storage": "github:itsdeka/wdk-rn-secure-storage#4e378cc627c8ef68de51f770d9ea8867607b4403",
     "expo-crypto": "^15.0.8",
     "pear-wrk-wdk": "github:itsdeka/pear-wrk-wdk#db1d0496826c9cfba46790354fcd1f045f73b50b",
     "react-native-bare-kit": "^0.11.0",

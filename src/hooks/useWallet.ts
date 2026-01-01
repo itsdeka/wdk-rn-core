@@ -1,10 +1,9 @@
-
 import { AccountService } from '../services/accountService'
 import { AddressService } from '../services/addressService'
 import { BalanceService } from '../services/balanceService'
 import { getWalletStore } from '../store/walletStore'
-import type { WalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
+import type { WalletStore } from '../store/walletStore'
 import type { WorkletStore } from '../store/workletStore'
 
 /**
@@ -73,23 +72,24 @@ export function useWallet(): UseWalletResult {
   const workletStore = getWorkletStore()
   const walletStore = getWalletStore()
 
-  // Subscribe to state changes using Zustand selectors with shallow equality
-  // Using specific selectors to minimize re-renders
-  const addresses = walletStore((state: WalletStore) => state.addresses)
-  const walletLoading = walletStore((state: WalletStore) => state.walletLoading)
+  // Subscribe to state changes using consolidated selectors to minimize re-renders
+  const walletState = walletStore((state: WalletStore) => ({
+    addresses: state.addresses,
+    walletLoading: state.walletLoading,
+    balances: state.balances,
+    balanceLoading: state.balanceLoading,
+    lastBalanceUpdate: state.lastBalanceUpdate,
+  }))
   const isInitialized = workletStore((state: WorkletStore) => state.isInitialized)
-  const balances = walletStore((state: WalletStore) => state.balances)
-  const balanceLoading = walletStore((state: WalletStore) => state.balanceLoading)
-  const lastBalanceUpdate = walletStore((state: WalletStore) => state.lastBalanceUpdate)
 
   // Get all addresses for a specific network
   const getNetworkAddresses = (network: string) => {
-    return addresses[network] || {}
+    return walletState.addresses[network] || {}
   }
 
   // Check if an address is loading
   const isLoadingAddress = (network: string, accountIndex: number = 0) => {
-    return walletLoading[`${network}-${accountIndex}`] || false
+    return walletState.walletLoading[`${network}-${accountIndex}`] || false
   }
 
   // Get a specific address (from cache or fetch)
@@ -141,12 +141,12 @@ export function useWallet(): UseWalletResult {
   }
   return {
     // State (reactive)
-    addresses,
-    walletLoading,
+    addresses: walletState.addresses,
+    walletLoading: walletState.walletLoading,
     isInitialized,
-    balances,
-    balanceLoading,
-    lastBalanceUpdate,
+    balances: walletState.balances,
+    balanceLoading: walletState.balanceLoading,
+    lastBalanceUpdate: walletState.lastBalanceUpdate,
     // Computed helpers
     getNetworkAddresses,
     isLoadingAddress,

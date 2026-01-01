@@ -16,6 +16,15 @@ import { AccountService } from '../services/accountService'
 import { BalanceService } from '../services/balanceService'
 import { getWalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
+import { convertBalanceToString } from '../utils/balanceUtils'
+import {
+  ACCOUNT_METHOD_GET_BALANCE,
+  ACCOUNT_METHOD_GET_TOKEN_BALANCE,
+  MAIN_WALLET_NAME,
+  WALLET_IDENTIFIER_PREFIX,
+  WALLET_NAME_PREFIX,
+} from '../utils/constants'
+import { log, logError, logWarn } from '../utils/logger'
 import type {
   BalanceFetchResult,
   TokenConfig,
@@ -24,15 +33,6 @@ import type {
   TokenHelpers,
   Wallet,
 } from '../types'
-import { convertBalanceToString } from '../utils/balanceUtils'
-import { log, logError, logWarn } from '../utils/logger'
-
-// Constants
-const ACCOUNT_METHOD_GET_BALANCE = 'getBalance'
-const ACCOUNT_METHOD_GET_TOKEN_BALANCE = 'getTokenBalance'
-const WALLET_IDENTIFIER_PREFIX = 'wallet-'
-const MAIN_WALLET_NAME = 'Main Wallet'
-const WALLET_NAME_PREFIX = 'Wallet '
 
 /**
  * Create token helpers from token configs
@@ -254,29 +254,22 @@ export function useBalanceFetcher(options: {
       const networks = tokenHelpers.getSupportedNetworks()
       log(`[BalanceFetcher] Fetching balances for wallet ${accountIndex} across ${networks.length} network(s): ${networks.join(', ')}`)
       
-      // Collect all fetch promises and their metadata
-      const fetchPromises: Array<Promise<BalanceFetchResult>> = []
-      const tokenMetadata: Array<{ network: string; token: TokenConfig }> = []
-
-      networks.forEach((network) => {
+      // Collect all fetch promises with metadata
+      const fetchTasks = networks.flatMap((network) => {
         const tokens = tokenHelpers.getTokensForNetwork(network)
-        tokens.forEach((token) => {
-          fetchPromises.push(fetchBalance(network, accountIndex, token.address))
-          tokenMetadata.push({ network, token })
-        })
+        return tokens.map((token) => ({
+          promise: fetchBalance(network, accountIndex, token.address),
+          network,
+          token,
+        }))
       })
 
       // Execute all fetches in parallel
-      const results = await Promise.all(fetchPromises)
+      const results = await Promise.all(fetchTasks.map((task) => task.promise))
 
       // Log results
       results.forEach((result, index) => {
-        const metadata = tokenMetadata[index]
-        if (!metadata) {
-          logWarn(`[BalanceFetcher] Missing token metadata for result at index ${index}`)
-          return
-        }
-        const { network, token } = metadata
+        const { network, token } = fetchTasks[index]!
         if (result.success) {
           log(`[BalanceFetcher] ✓ ${network}:${accountIndex}:${token.symbol} = ${result.balance}`)
         } else {
@@ -301,31 +294,36 @@ export function useBalanceFetcher(options: {
 
     const allWallets = getAllWallets()
     log(`[BalanceFetcher] Starting to fetch balances for ${allWallets.length} wallet(s)`)
-    const results: BalanceFetchResult[] = []
 
     try {
-      // Process wallets sequentially
-      for (const wallet of allWallets) {
-        try {
+      // Process wallets in parallel with error isolation
+      const walletResults = await Promise.allSettled(
+        allWallets.map(async (wallet) => {
           log(`[BalanceFetcher] Processing wallet ${wallet.accountIndex}...`)
-          const walletResults = await fetchAllBalancesForWallet(
-            wallet.accountIndex
-          )
-          results.push(...walletResults)
-          log(`[BalanceFetcher] Completed wallet ${wallet.accountIndex}: ${walletResults.length} balance(s)`)
-        } catch (error) {
-          logError(`[BalanceFetcher] Error processing wallet ${wallet.accountIndex}:`, error)
+          const results = await fetchAllBalancesForWallet(wallet.accountIndex)
+          log(`[BalanceFetcher] Completed wallet ${wallet.accountIndex}: ${results.length} balance(s)`)
+          return results
+        })
+      )
+
+      // Flatten results and handle errors
+      const results: BalanceFetchResult[] = []
+      walletResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          results.push(...result.value)
+        } else {
+          logError(`[BalanceFetcher] Error processing wallet ${allWallets[index]!.accountIndex}:`, result.reason)
         }
-      }
+      })
 
       const successCount = results.filter(r => r.success).length
       const failCount = results.filter(r => !r.success).length
       log(`[BalanceFetcher] ✅ Completed fetching all balances: ${successCount} success, ${failCount} failed, ${results.length} total`)
+      return results
     } catch (error) {
       logError('[BalanceFetcher] Fatal error in fetchAllBalances:', error)
+      return []
     }
-
-    return results
   }, [getAllWallets, fetchAllBalancesForWallet, getIsInitialized])
 
   /**

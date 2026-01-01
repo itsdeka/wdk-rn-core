@@ -71,34 +71,36 @@ export interface UseWorkletResult {
 export function useWorklet(): UseWorkletResult {
   const store = getWorkletStore()
 
-  // Subscribe to state changes using Zustand selectors
-  const isWorkletStarted = store((state: WorkletStore) => state.isWorkletStarted)
-  const isInitialized = store((state: WorkletStore) => state.isInitialized)
-  const isLoading = store((state: WorkletStore) => state.isLoading)
-  const error = store((state: WorkletStore) => state.error)
-  const hrpc = store((state: WorkletStore) => state.hrpc)
-  const worklet = store((state: WorkletStore) => state.worklet)
-  const workletStartResult = store((state: WorkletStore) => state.workletStartResult)
-  const wdkInitResult = store((state: WorkletStore) => state.wdkInitResult)
-  const encryptedSeed = store((state: WorkletStore) => state.encryptedSeed)
-  const encryptionKey = store((state: WorkletStore) => state.encryptionKey)
-  const networkConfigs = store((state: WorkletStore) => state.networkConfigs)
+  // Subscribe to state changes using consolidated selector to minimize re-renders
+  const workletState = store((state: WorkletStore) => ({
+    isWorkletStarted: state.isWorkletStarted,
+    isInitialized: state.isInitialized,
+    isLoading: state.isLoading,
+    error: state.error,
+    hrpc: state.hrpc,
+    worklet: state.worklet,
+    workletStartResult: state.workletStartResult,
+    wdkInitResult: state.wdkInitResult,
+    encryptedSeed: state.encryptedSeed,
+    encryptionKey: state.encryptionKey,
+    networkConfigs: state.networkConfigs,
+  }))
 
   // Actions are provided by WorkletLifecycleService (static methods, stable references)
   // State values are from Zustand selectors and are already reactive
   return {
     // State (reactive)
-    isWorkletStarted,
-    isInitialized,
-    isLoading,
-    error,
-    hrpc,
-    worklet,
-    workletStartResult,
-    wdkInitResult,
-    encryptedSeed,
-    encryptionKey,
-    networkConfigs,
+    isWorkletStarted: workletState.isWorkletStarted,
+    isInitialized: workletState.isInitialized,
+    isLoading: workletState.isLoading,
+    error: workletState.error,
+    hrpc: workletState.hrpc,
+    worklet: workletState.worklet,
+    workletStartResult: workletState.workletStartResult,
+    wdkInitResult: workletState.wdkInitResult,
+    encryptedSeed: workletState.encryptedSeed,
+    encryptionKey: workletState.encryptionKey,
+    networkConfigs: workletState.networkConfigs,
     // Actions (static methods, stable references)
     startWorklet: WorkletLifecycleService.startWorklet,
     initializeWDK: WorkletLifecycleService.initializeWDK,

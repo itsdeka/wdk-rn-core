@@ -1,9 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { WalletSetupService } from '../services/walletSetupService'
-import { WorkletLifecycleService } from '../services/workletLifecycleService'
-import type { NetworkConfigs } from '../types'
 import { logError } from '../utils/logger'
+import type { NetworkConfigs } from '../types'
 
 /**
  * Hook for wallet initialization and lifecycle management

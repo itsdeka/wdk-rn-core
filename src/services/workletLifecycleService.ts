@@ -10,14 +10,14 @@ import { Worklet } from 'react-native-bare-kit'
 
 import { getWalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
-import type { WorkletState } from '../store/workletStore'
 import { asExtendedHRPC } from '../types/hrpc'
-import type { NetworkConfigs } from '../types'
 import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
 import { handleServiceError } from '../utils/errorHandling'
 import { normalizeError } from '../utils/errorUtils'
 import { log, logError, logWarn } from '../utils/logger'
 import { isInitialized as isWorkletInitialized, requireExtendedHRPC } from '../utils/storeHelpers'
+import type { NetworkConfigs } from '../types'
+import type { WorkletState } from '../store/workletStore'
 
 /**
  * Extended HRPC type that may have a cleanup method
@@ -39,7 +39,7 @@ interface WorkletWithCleanup extends Worklet {
  * Type guard to check if HRPC has cleanup method
  */
 function hasHRPCCleanup(hrpc: HRPC): hrpc is HRPCWithCleanup {
-  return typeof (hrpc as unknown as Record<string, unknown>).cleanup === 'function'
+  return 'cleanup' in hrpc && typeof (hrpc as Record<string, unknown>).cleanup === 'function'
 }
 
 /**
@@ -48,9 +48,9 @@ function hasHRPCCleanup(hrpc: HRPC): hrpc is HRPCWithCleanup {
 function hasWorkletCleanup(worklet: Worklet): worklet is WorkletWithCleanup {
   const w = worklet as unknown as Record<string, unknown>
   return (
-    typeof w.cleanup === 'function' ||
-    typeof w.destroy === 'function' ||
-    typeof w.stop === 'function'
+    (typeof w.cleanup === 'function') ||
+    (typeof w.destroy === 'function') ||
+    (typeof w.stop === 'function')
   )
 }
 
@@ -71,15 +71,12 @@ export class WorkletLifecycleService {
     if (!resource) return
     
     const r = resource as unknown as Record<string, unknown>
-    for (const method of cleanupMethods) {
-      if (typeof r[method] === 'function') {
-        try {
-          await (r[method] as () => Promise<void> | void)()
-          break // Only call first available method
-        } catch (error) {
-          logWarn(`Error calling ${method} on resource:`, error)
-          // Continue to next method or finish
-        }
+    const method = cleanupMethods.find((m) => typeof r[m] === 'function')
+    if (method) {
+      try {
+        await (r[method] as () => Promise<void> | void)()
+      } catch (error) {
+        logWarn(`Error calling ${method} on resource:`, error)
       }
     }
   }
@@ -407,27 +404,13 @@ export class WorkletLifecycleService {
    * Safely extracts status from result object
    */
   private static extractWdkInitResult(result: unknown): { status?: string | null } | null {
-    if (result !== null && typeof result === 'object' && result !== null && 'status' in result) {
-      const resultObj = result as { status?: unknown }
-      const status = resultObj.status
+    if (result && typeof result === 'object' && 'status' in result) {
+      const status = (result as { status?: unknown }).status
       if (status === null || status === undefined || typeof status === 'string') {
         return { status: status ?? null }
       }
     }
     return null
-  }
-
-  /**
-   * Get reset state for wallet store
-   */
-  private static getResetWalletState() {
-    return {
-      addresses: {},
-      walletLoading: {},
-      balances: {},
-      balanceLoading: {},
-      lastBalanceUpdate: {},
-    }
   }
 
   /**
@@ -451,7 +434,13 @@ export class WorkletLifecycleService {
       workletStartResult: null,
       wdkInitResult: null,
     })
-    walletStore.setState(this.getResetWalletState())
+    walletStore.setState({
+      addresses: {},
+      walletLoading: {},
+      balances: {},
+      balanceLoading: {},
+      lastBalanceUpdate: {},
+    })
   }
 
   /**
