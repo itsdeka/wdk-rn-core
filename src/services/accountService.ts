@@ -6,11 +6,10 @@
  * like getBalance, getTokenBalance, signMessage, signTransaction, etc.
  */
 
-// Local imports
-import { getWorkletStore } from '../store/workletStore'
-import { logError } from '../utils/logger'
-import { normalizeError } from '../utils/errorUtils'
-import { isValidNetworkName, isValidAccountIndex } from '../utils/typeGuards'
+import { convertBigIntToString } from '../utils/balanceUtils'
+import { handleServiceError } from '../utils/errorHandling'
+import { requireInitialized } from '../utils/storeHelpers'
+import { validateAccountIndex, validateNetworkName } from '../utils/validation'
 
 /**
  * Account Service
@@ -62,29 +61,15 @@ export class AccountService {
       throw new Error('methodName must be a non-empty string')
     }
 
-    // Runtime validation using type guards
-    if (!isValidNetworkName(network)) {
-      throw new Error('network must be a valid network name (non-empty string with alphanumeric characters, hyphens, and underscores)')
-    }
-    if (!isValidAccountIndex(accountIndex)) {
-      throw new Error('accountIndex must be a non-negative integer')
-    }
+    // Validate inputs
+    validateNetworkName(network)
+    validateAccountIndex(accountIndex)
 
-    const workletStore = getWorkletStore()
-    const workletState = workletStore.getState()
-    
-    if (!workletState.isInitialized || !workletState.hrpc) {
-      throw new Error('WDK not initialized')
-    }
+    // Require initialized worklet
+    const hrpc = requireInitialized()
 
     try {
-      // Get fresh state to ensure hrpc is still available
-      const currentWorkletState = workletStore.getState()
-      if (!currentWorkletState.hrpc) {
-        throw new Error('HRPC instance not available')
-      }
-
-      const response = await currentWorkletState.hrpc.callMethod({
+      const response = await hrpc.callMethod({
         methodName,
         network,
         accountIndex,
@@ -111,29 +96,13 @@ export class AccountService {
       }
       
       // Recursively convert BigInt values to strings to prevent serialization errors
-      const convertBigIntToString = (value: unknown): unknown => {
-        if (typeof value === 'bigint') {
-          return value.toString()
-        }
-        if (Array.isArray(value)) {
-          return value.map(convertBigIntToString)
-        }
-        if (value && typeof value === 'object') {
-          return Object.fromEntries(
-            Object.entries(value).map(([key, val]) => [key, convertBigIntToString(val)])
-          )
-        }
-        return value
-      }
-      
       return convertBigIntToString(parsed) as T
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'AccountService',
-        operation: `callAccountMethod:${methodName}`
+      handleServiceError(error, 'AccountService', `callAccountMethod:${methodName}`, {
+        network,
+        accountIndex,
+        methodName,
       })
-      logError(`[AccountService] Failed to call ${methodName} on ${network}:${accountIndex}:`, normalizedError)
-      throw normalizedError
     }
   }
 }

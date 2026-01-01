@@ -1,5 +1,5 @@
-// React hooks
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+
 import { WalletSetupService } from '../services/walletSetupService'
 import { logError } from '../utils/logger'
 

@@ -5,17 +5,20 @@
  * - Worklet startup
  * - Wallet existence checking
  * - Wallet initialization (new or existing)
+ * 
+ * Uses a state machine pattern to simplify complex initialization logic
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+
 import type { SecureStorage } from '@tetherto/wdk-rn-secure-storage'
-import { AuthenticationError } from '@tetherto/wdk-rn-secure-storage'
-import type { NetworkConfigs } from '../types'
-import { useWorklet } from './useWorklet'
-import { useWalletSetup } from './useWalletSetup'
+
 import { useWallet } from './useWallet'
-import { normalizeError } from '../utils/errorUtils'
+import { useWalletSetup } from './useWalletSetup'
+import { useWorklet } from './useWorklet'
+import { isAuthenticationError, normalizeError } from '../utils/errorUtils'
 import { log, logError } from '../utils/logger'
+import type { NetworkConfigs } from '../types'
 
 export interface UseWdkInitializationResult {
   /** Whether wallet exists in secure storage (null = checking) */
@@ -32,25 +35,102 @@ export interface UseWdkInitializationResult {
   walletInitialized: boolean
 }
 
+type InitState =
+  | { type: 'idle' }
+  | { type: 'starting_worklet' }
+  | { type: 'checking_wallet' }
+  | { type: 'initializing_wallet'; walletExists: boolean }
+  | { type: 'ready' }
+  | { type: 'error'; error: Error; isAuthError: boolean }
+
+type InitAction =
+  | { type: 'START_WORKLET' }
+  | { type: 'WORKLET_STARTED' }
+  | { type: 'WORKLET_ERROR'; error: Error }
+  | { type: 'CHECK_WALLET' }
+  | { type: 'WALLET_CHECKED'; exists: boolean }
+  | { type: 'WALLET_CHECK_ERROR' }
+  | { type: 'INITIALIZE_WALLET'; walletExists: boolean }
+  | { type: 'WALLET_INITIALIZED' }
+  | { type: 'WALLET_INIT_ERROR'; error: Error }
+  | { type: 'RESET' }
+  | { type: 'RETRY' }
+
+interface InitStateContext {
+  walletExists: boolean | null
+  error: Error | null
+}
+
+function initReducer(state: InitState, action: InitAction): InitState {
+  switch (action.type) {
+    case 'START_WORKLET':
+      return state.type === 'idle' ? { type: 'starting_worklet' } : state
+
+    case 'WORKLET_STARTED':
+      return { type: 'checking_wallet' }
+
+    case 'WORKLET_ERROR':
+      return { type: 'error', error: action.error, isAuthError: false }
+
+    case 'CHECK_WALLET':
+      return state.type === 'starting_worklet' || state.type === 'checking_wallet'
+        ? { type: 'checking_wallet' }
+        : state
+
+    case 'WALLET_CHECKED':
+      return { type: 'initializing_wallet', walletExists: action.exists }
+
+    case 'WALLET_CHECK_ERROR':
+      return { type: 'initializing_wallet', walletExists: false }
+
+    case 'INITIALIZE_WALLET':
+      return { type: 'initializing_wallet', walletExists: action.walletExists }
+
+    case 'WALLET_INITIALIZED':
+      return { type: 'ready' }
+
+    case 'WALLET_INIT_ERROR':
+      return {
+        type: 'error',
+        error: action.error,
+        isAuthError: isAuthenticationError(action.error),
+      }
+
+    case 'RESET':
+      return { type: 'idle' }
+
+    case 'RETRY':
+      return state.type === 'error' ? { type: 'idle' } : state
+
+    default:
+      return state
+  }
+}
+
+function getStateContext(state: InitState): InitStateContext {
+  switch (state.type) {
+    case 'checking_wallet':
+      return { walletExists: null, error: null }
+    case 'initializing_wallet':
+      return { walletExists: state.walletExists, error: null }
+    case 'error':
+      return { walletExists: null, error: state.error }
+    case 'ready':
+      return { walletExists: true, error: null }
+    default:
+      return { walletExists: null, error: null }
+  }
+}
+
 export function useWdkInitialization(
   secureStorage: SecureStorage,
   networkConfigs: NetworkConfigs,
-  abortController: AbortController | null,
   identifier?: string,
   enabled: boolean = true
 ): UseWdkInitializationResult {
-  const [hasWalletChecked, setHasWalletChecked] = useState(false)
-  const [walletExists, setWalletExists] = useState<boolean | null>(null)
-  const [initializationError, setInitializationError] = useState<Error | null>(null)
-  const [walletInitError, setWalletInitError] = useState<Error | null>(null)
-
-  const hasAttemptedWorkletInitialization = useRef(false)
-  const hasAttemptedWalletInitialization = useRef(false)
-  // Track operation IDs to prevent race conditions
-  const walletInitOperationId = useRef(0)
-  const isMountedRef = useRef(true)
-  // Track if authentication error occurred to prevent automatic retries
-  const authenticationErrorOccurredRef = useRef(false)
+  const [state, dispatch] = useReducer(initReducer, { type: 'idle' })
+  const cancelledRef = useRef(false)
+  const prevEnabledRef = useRef(enabled)
 
   const {
     isWorkletStarted,
@@ -67,391 +147,191 @@ export function useWdkInitialization(
 
   const { isInitialized: walletInitialized } = useWallet()
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-    }
-  }, [])
+  const stateContext = getStateContext(state)
 
-  // Reset wallet checking state when enabled changes from false to true
-  // This allows wallet checking to happen when user logs in
-  const prevEnabledRef = useRef(enabled)
+  // Reset state when enabled changes from false to true
   useEffect(() => {
     if (enabled && !prevEnabledRef.current) {
-      // Enabled changed from false to true (user logged in)
-      if (isWorkletStarted) {
-        // Worklet is already started - reset wallet check state to trigger wallet checking
-        log('[useWdkInitialization] Enabled changed to true, resetting wallet check state')
-        setHasWalletChecked(false)
-        setWalletExists(null)
-        setWalletInitError(null)
-        hasAttemptedWalletInitialization.current = false
-        authenticationErrorOccurredRef.current = false
-      } else {
-        // Worklet hasn't started yet - reset worklet initialization attempt flag and trigger start
-        log('[useWdkInitialization] Enabled changed to true, but worklet not started - resetting and starting worklet')
-        hasAttemptedWorkletInitialization.current = false
-        setHasWalletChecked(false)
-        setWalletExists(null)
-        setWalletInitError(null)
-        hasAttemptedWalletInitialization.current = false
-        authenticationErrorOccurredRef.current = false
-        
-        // Trigger worklet initialization if not already started/starting
-        if (!isWorkletInitialized && !isWorkletLoading) {
-          const initializeWorklet = async () => {
-            if (abortController?.signal.aborted) {
-              return
-            }
-
-            try {
-              log('[useWdkInitialization] Starting worklet initialization (triggered by enabled change)...')
-              setInitializationError(null)
-              hasAttemptedWorkletInitialization.current = true
-
-              await startWorklet(networkConfigs)
-              
-              if (abortController?.signal.aborted) {
-                return
-              }
-              
-              log('[useWdkInitialization] Worklet started successfully (triggered by enabled change)')
-            } catch (error) {
-              if (abortController?.signal.aborted) {
-                return
-              }
-              
-              const err = normalizeError(error, true, { 
-                component: 'useWdkInitialization', 
-                operation: 'workletInitialization' 
-              })
-              logError('[useWdkInitialization] Failed to initialize worklet (triggered by enabled change):', error)
-              setInitializationError(err)
-            }
-          }
-
-          initializeWorklet()
-        }
-      }
+      log('[useWdkInitialization] Enabled changed to true, resetting state')
+      dispatch({ type: 'RESET' })
+      cancelledRef.current = false
     }
     prevEnabledRef.current = enabled
-  }, [enabled, isWorkletStarted, isWorkletInitialized, isWorkletLoading, startWorklet, networkConfigs, abortController])
+  }, [enabled])
 
-  // Initialize worklet immediately when component mounts
+  // Initialize worklet when component mounts or when reset
   useEffect(() => {
-    if (isWorkletInitialized || isWorkletLoading || hasAttemptedWorkletInitialization.current) {
+    if (
+      state.type !== 'idle' ||
+      isWorkletInitialized ||
+      isWorkletLoading ||
+      !enabled
+    ) {
       return
     }
 
-    if (abortController?.signal.aborted) {
-      return
-    }
+    cancelledRef.current = false
+    dispatch({ type: 'START_WORKLET' })
 
     const initializeWorklet = async () => {
-      if (abortController?.signal.aborted) {
-        return
-      }
-
       try {
         log('[useWdkInitialization] Starting worklet initialization...')
-        setInitializationError(null)
-        hasAttemptedWorkletInitialization.current = true
-
         await startWorklet(networkConfigs)
-        
-        if (abortController?.signal.aborted) {
-          return
-        }
-        
+
+        if (cancelledRef.current) return
         log('[useWdkInitialization] Worklet started successfully')
+        dispatch({ type: 'WORKLET_STARTED' })
       } catch (error) {
-        if (abortController?.signal.aborted) {
-          return
-        }
-        
-        const err = normalizeError(error, true, { 
-          component: 'useWdkInitialization', 
-          operation: 'workletInitialization' 
+        if (cancelledRef.current) return
+
+        const err = normalizeError(error, true, {
+          component: 'useWdkInitialization',
+          operation: 'workletInitialization',
         })
         logError('[useWdkInitialization] Failed to initialize worklet:', error)
-        setInitializationError(err)
+        dispatch({ type: 'WORKLET_ERROR', error: err })
       }
     }
 
     initializeWorklet()
-  }, [isWorkletInitialized, isWorkletLoading, networkConfigs, startWorklet, abortController])
 
-  // Check if wallet exists when worklet is started (only if enabled)
+    return () => {
+      cancelledRef.current = true
+    }
+  }, [state.type, isWorkletInitialized, isWorkletLoading, enabled, networkConfigs, startWorklet])
+
+  // Check wallet existence when worklet is started
   useEffect(() => {
-    if (!isWorkletStarted || hasWalletChecked || !enabled) {
+    if (
+      state.type !== 'checking_wallet' ||
+      !isWorkletStarted ||
+      !enabled
+    ) {
       return
     }
 
-    let cancelled = false
+    cancelledRef.current = false
 
     const checkWallet = async () => {
       try {
         log('[useWdkInitialization] Checking if wallet exists...')
         const walletExistsResult = await hasWallet(identifier)
         log('[useWdkInitialization] Wallet check result:', walletExistsResult)
-        if (!cancelled) {
-          setHasWalletChecked(true)
-          setWalletExists(walletExistsResult)
-        }
+
+        if (cancelledRef.current) return
+        dispatch({ type: 'WALLET_CHECKED', exists: walletExistsResult })
       } catch (error) {
         logError('[useWdkInitialization] Failed to check wallet:', error)
-        if (!cancelled) {
-          setHasWalletChecked(true)
-          setWalletExists(false)
-        }
+        if (cancelledRef.current) return
+        dispatch({ type: 'WALLET_CHECK_ERROR' })
       }
     }
 
     checkWallet()
 
     return () => {
-      cancelled = true
+      cancelledRef.current = true
     }
-  }, [isWorkletStarted, hasWalletChecked, hasWallet, identifier, enabled])
+  }, [state.type, isWorkletStarted, hasWallet, identifier, enabled])
 
-  // Shared wallet initialization logic
-  const performWalletInitialization = useCallback(async (signal?: AbortSignal, operationId?: number) => {
-    if (signal?.aborted) {
-      throw new Error('Wallet initialization cancelled')
-    }
-
-    // Check if this operation is still current
-    if (operationId !== undefined && operationId !== walletInitOperationId.current) {
-      throw new Error('Wallet initialization superseded by newer operation')
-    }
-
-    try {
-      log('[useWdkInitialization] Starting wallet initialization...')
-      if (isMountedRef.current) {
-        setWalletInitError(null)
-      }
-
-      if (walletExists) {
-        log('[useWdkInitialization] Loading existing wallet from secure storage...')
-        await initializeWallet({ createNew: false, identifier })
-
-        // read mnemonic
-        
-        if (signal?.aborted || (operationId !== undefined && operationId !== walletInitOperationId.current)) {
-          throw new Error('Wallet initialization cancelled')
-        }
-        
-        if (isMountedRef.current) {
-          log('[useWdkInitialization] Existing wallet loaded successfully')
-        }
-      } else {
-        log('[useWdkInitialization] Creating new wallet...')
-        await initializeWallet({ createNew: true, identifier })
-        
-        if (signal?.aborted || (operationId !== undefined && operationId !== walletInitOperationId.current)) {
-          throw new Error('Wallet initialization cancelled')
-        }
-        
-        if (isMountedRef.current) {
-          log('[useWdkInitialization] New wallet created successfully')
-        }
-      }
-
-      if (isMountedRef.current) {
-        log('[useWdkInitialization] Wallet initialized successfully')
-      }
-    } catch (error) {
-      if (signal?.aborted || (operationId !== undefined && operationId !== walletInitOperationId.current)) {
-        throw error
-      }
-      
-      // Check if this is an AuthenticationError to prevent automatic retries
-      const isAuthenticationError = 
-        error instanceof AuthenticationError ||
-        (error instanceof Error && error.name === 'AuthenticationError') ||
-        (error instanceof Error && (
-          error.message.toLowerCase().includes('authentication') ||
-          error.message.toLowerCase().includes('biometric') ||
-          error.message.toLowerCase().includes('authentication required but failed')
-        ))
-      
-      if (isAuthenticationError) {
-        log('[useWdkInitialization] Authentication error detected - preventing automatic retry')
-        authenticationErrorOccurredRef.current = true
-      }
-      
-      const err = normalizeError(error, true, { 
-        component: 'useWdkInitialization', 
-        operation: 'walletInitialization' 
-      })
-      logError('[useWdkInitialization] Failed to initialize wallet:', error)
-      if (isMountedRef.current) {
-        setWalletInitError(err)
-      }
-      throw err
-    }
-  }, [walletExists, initializeWallet, identifier])
-
-  // Initialize wallet when worklet is started and wallet check is complete (only if enabled)
+  // Initialize wallet when wallet check is complete
   useEffect(() => {
-    if (!hasWalletChecked || !isWorkletStarted || !enabled) {
+    if (
+      state.type !== 'initializing_wallet' ||
+      walletInitialized ||
+      !enabled
+    ) {
       return
     }
 
-    // Don't initialize if wallet is already initialized
-    if (walletInitialized) {
-      return
-    }
+    cancelledRef.current = false
 
-    // Don't automatically retry if authentication error occurred - wait for user to click retry
-    // This check must be early and persistent to prevent any automatic retries
-    if (authenticationErrorOccurredRef.current) {
-      log('[useWdkInitialization] Skipping automatic initialization due to authentication error - waiting for user retry')
-      return
-    }
-
-    // Don't attempt if already attempting or currently initializing
-    if (hasAttemptedWalletInitialization.current || isWalletInitializing) {
-      return
-    }
-
-    if (abortController?.signal.aborted) {
-      return
-    }
-
-    // Generate new operation ID for this initialization attempt
-    const currentOperationId = ++walletInitOperationId.current
-    hasAttemptedWalletInitialization.current = true
-
-    const initializeWalletFlow = async () => {
-      if (abortController?.signal.aborted || !isMountedRef.current) {
-        return
-      }
-
-      // Verify this operation is still current
-      if (currentOperationId !== walletInitOperationId.current) {
-        log('[useWdkInitialization] Initialization superseded by newer operation')
-        return
-      }
-      
+    const performInitialization = async () => {
       try {
-        await performWalletInitialization(abortController?.signal, currentOperationId)
+        log('[useWdkInitialization] Starting wallet initialization...')
+        const walletExists = state.walletExists
+
+        if (walletExists) {
+          log('[useWdkInitialization] Loading existing wallet from secure storage...')
+          await initializeWallet({ createNew: false, identifier })
+        } else {
+          log('[useWdkInitialization] Creating new wallet...')
+          await initializeWallet({ createNew: true, identifier })
+        }
+
+        if (cancelledRef.current) return
+        log('[useWdkInitialization] Wallet initialized successfully')
+        dispatch({ type: 'WALLET_INITIALIZED' })
       } catch (error) {
-        // Check if this is an authentication error - if so, don't reset flags to prevent retry
-        // Check both the original error and normalized error properties
-        const isAuthenticationError = 
-          error instanceof AuthenticationError ||
-          (error instanceof Error && (
-            error.name === 'AuthenticationError' ||
-            error.message.toLowerCase().includes('authentication') ||
-            error.message.toLowerCase().includes('biometric') ||
-            error.message.toLowerCase().includes('authentication required but failed')
-          ))
-        
-        if (isAuthenticationError) {
-          log('[useWdkInitialization] Authentication error in initializeWalletFlow - keeping flags set to prevent retry')
-          // Ensure the flag is set (in case it wasn't set in performWalletInitialization)
-          authenticationErrorOccurredRef.current = true
-          // Ensure error is set in state (it should already be set in performWalletInitialization, but ensure it)
-          if (isMountedRef.current && error instanceof Error) {
-            const err = normalizeError(error, true, { 
-              component: 'useWdkInitialization', 
-              operation: 'walletInitialization' 
-            })
-            setWalletInitError(err)
-          }
-          // Keep hasAttemptedWalletInitialization.current = true to prevent automatic retry
-          return // Exit early, don't reset any flags
-        }
-        
-        // Only reset flag if this operation was cancelled or superseded AND it's not an auth error
-        if (abortController?.signal.aborted || currentOperationId !== walletInitOperationId.current) {
-          // Only reset if no newer operation has started
-          if (currentOperationId === walletInitOperationId.current) {
-            hasAttemptedWalletInitialization.current = false
-          }
-        }
+        if (cancelledRef.current) return
+
+        const err = normalizeError(error, true, {
+          component: 'useWdkInitialization',
+          operation: 'walletInitialization',
+        })
+        logError('[useWdkInitialization] Failed to initialize wallet:', error)
+        dispatch({ type: 'WALLET_INIT_ERROR', error: err })
       }
     }
 
-    initializeWalletFlow()
-    
+    performInitialization()
+
     return () => {
-      // Only cancel if this is still the current operation
-      if (currentOperationId === walletInitOperationId.current) {
-        // Don't reset flags if authentication error occurred - we want to prevent automatic retry
-        if (!authenticationErrorOccurredRef.current) {
-          // Increment operation ID to invalidate this operation
-          walletInitOperationId.current++
-          if (abortController && !abortController.signal.aborted) {
-            abortController.abort()
-          }
-          hasAttemptedWalletInitialization.current = false
-        }
-      }
+      cancelledRef.current = true
     }
-  }, [
-    hasWalletChecked,
-    walletExists,
-    isWorkletStarted,
-    isWalletInitializing,
-    walletInitialized,
-    performWalletInitialization,
-    abortController,
-    enabled,
-  ])
+  }, [state, walletInitialized, initializeWallet, identifier, enabled])
+
+  // Update state when wallet becomes initialized externally
+  useEffect(() => {
+    if (walletInitialized && state.type !== 'ready' && state.type !== 'error') {
+      dispatch({ type: 'WALLET_INITIALIZED' })
+    }
+  }, [walletInitialized, state.type])
 
   const retry = useCallback(async () => {
-    if (!isMountedRef.current) {
-      return
-    }
-
     log('[useWdkInitialization] Retrying initialization...')
-    setWalletInitError(null)
-    setInitializationError(null)
-    
-    // Reset authentication error flag to allow retry
-    authenticationErrorOccurredRef.current = false
-    
-    // Generate new operation ID for retry
-    const retryOperationId = ++walletInitOperationId.current
-    hasAttemptedWalletInitialization.current = false
+    dispatch({ type: 'RETRY' })
+    cancelledRef.current = false
 
-    if (!hasWalletChecked || !isWorkletStarted) {
-      log('[useWdkInitialization] Cannot retry: prerequisite conditions not met')
+    if (!isWorkletStarted) {
+      log('[useWdkInitialization] Cannot retry: worklet not started')
       return
     }
 
-    if (abortController?.signal.aborted) {
-      return
+    // If wallet check hasn't happened, trigger it
+    if (stateContext.walletExists === null && isWorkletStarted) {
+      dispatch({ type: 'CHECK_WALLET' })
+    } else if (stateContext.walletExists !== null) {
+      // Retry wallet initialization
+      dispatch({
+        type: 'INITIALIZE_WALLET',
+        walletExists: stateContext.walletExists,
+      })
     }
+  }, [isWorkletStarted, stateContext.walletExists])
 
-    hasAttemptedWalletInitialization.current = true
+  // Calculate isInitializing based on state
+  const isInitializing = useMemo(() => {
+    if (!enabled) return false
+    if (isWorkletLoading || isWalletInitializing) return true
 
-    try {
-      log('[useWdkInitialization] Retrying wallet initialization...')
-      await performWalletInitialization(abortController?.signal, retryOperationId)
-    } catch (error) {
-      // Only reset flag if this operation was cancelled or superseded
-      if (abortController?.signal.aborted || retryOperationId !== walletInitOperationId.current) {
-        if (retryOperationId === walletInitOperationId.current) {
-          hasAttemptedWalletInitialization.current = false
-        }
-      }
-    }
-  }, [hasWalletChecked, isWorkletStarted, performWalletInitialization, abortController])
+    const inProgressStates = ['starting_worklet', 'checking_wallet', 'initializing_wallet'] as const
+    if (inProgressStates.includes(state.type as typeof inProgressStates[number])) return true
 
-  // When disabled, mark as not initializing once worklet is started
-  const isInitializing = enabled 
-    ? (isWorkletLoading || isWalletInitializing || (!hasWalletChecked && isWorkletStarted))
-    : isWorkletLoading
+    return !stateContext.walletExists && isWorkletStarted && state.type === 'idle'
+  }, [
+    enabled,
+    state.type,
+    stateContext.walletExists,
+    isWorkletStarted,
+    isWorkletLoading,
+    isWalletInitializing,
+  ])
 
-  const finalError = walletInitError || initializationError
   return {
-    walletExists,
+    walletExists: stateContext.walletExists,
     isInitializing,
-    error: finalError,
+    error: stateContext.error,
     retry,
     isWorkletStarted,
     walletInitialized,

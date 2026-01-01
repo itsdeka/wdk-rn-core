@@ -202,7 +202,7 @@ describe('AddressService', () => {
 
     it('should validate network name', async () => {
       await expect(AddressService.getAddress('', 0)).rejects.toThrow(
-        'network must be a valid network name'
+        'network must be a non-empty string containing only alphanumeric characters, hyphens, and underscores'
       )
     })
 

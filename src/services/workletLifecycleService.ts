@@ -5,18 +5,19 @@
  * This service is focused solely on worklet lifecycle management.
  */
 
-// External packages
-import { Worklet } from 'react-native-bare-kit'
 import { HRPC } from 'pear-wrk-wdk'
+import { Worklet } from 'react-native-bare-kit'
 
-// Local imports
-import type { NetworkConfigs } from '../types'
-import { getWorkletStore } from '../store/workletStore'
 import { getWalletStore } from '../store/walletStore'
+import { getWorkletStore } from '../store/workletStore'
 import { asExtendedHRPC } from '../types/hrpc'
 import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
-import { log, logError, logWarn } from '../utils/logger'
+import { handleServiceError } from '../utils/errorHandling'
 import { normalizeError } from '../utils/errorUtils'
+import { log, logError, logWarn } from '../utils/logger'
+import { isInitialized as isWorkletInitialized, requireExtendedHRPC } from '../utils/storeHelpers'
+import type { NetworkConfigs } from '../types'
+import type { WorkletState } from '../store/workletStore'
 
 /**
  * Extended HRPC type that may have a cleanup method
@@ -38,7 +39,7 @@ interface WorkletWithCleanup extends Worklet {
  * Type guard to check if HRPC has cleanup method
  */
 function hasHRPCCleanup(hrpc: HRPC): hrpc is HRPCWithCleanup {
-  return typeof (hrpc as unknown as Record<string, unknown>).cleanup === 'function'
+  return 'cleanup' in hrpc && typeof (hrpc as Record<string, unknown>).cleanup === 'function'
 }
 
 /**
@@ -47,9 +48,9 @@ function hasHRPCCleanup(hrpc: HRPC): hrpc is HRPCWithCleanup {
 function hasWorkletCleanup(worklet: Worklet): worklet is WorkletWithCleanup {
   const w = worklet as unknown as Record<string, unknown>
   return (
-    typeof w.cleanup === 'function' ||
-    typeof w.destroy === 'function' ||
-    typeof w.stop === 'function'
+    (typeof w.cleanup === 'function') ||
+    (typeof w.destroy === 'function') ||
+    (typeof w.stop === 'function')
   )
 }
 
@@ -60,6 +61,27 @@ function hasWorkletCleanup(worklet: Worklet): worklet is WorkletWithCleanup {
  */
 export class WorkletLifecycleService {
   /**
+   * Cleanup a resource by trying cleanup methods in order
+   * Handles cleanup gracefully, continuing even if individual steps fail
+   */
+  private static async cleanupResource(
+    resource: HRPC | Worklet | null,
+    cleanupMethods: string[]
+  ): Promise<void> {
+    if (!resource) return
+    
+    const r = resource as unknown as Record<string, unknown>
+    const method = cleanupMethods.find((m) => typeof r[m] === 'function')
+    if (method) {
+      try {
+        await (r[method] as () => Promise<void> | void)()
+      } catch (error) {
+        logWarn(`Error calling ${method} on resource:`, error)
+      }
+    }
+  }
+
+  /**
    * Cleanup worklet resources (HRPC and Worklet instances)
    * Handles cleanup gracefully, continuing even if individual steps fail
    */
@@ -69,24 +91,10 @@ export class WorkletLifecycleService {
   ): Promise<void> {
     try {
       // Cleanup HRPC if it has a cleanup method
-      if (hrpc && hasHRPCCleanup(hrpc)) {
-        const hrpcWithCleanup = hrpc as HRPCWithCleanup
-        if (hrpcWithCleanup.cleanup) {
-          await hrpcWithCleanup.cleanup()
-        }
-      }
+      await this.cleanupResource(hrpc, ['cleanup'])
       
-      // Cleanup worklet if it has cleanup methods
-      if (worklet && hasWorkletCleanup(worklet)) {
-        const workletWithCleanup = worklet as WorkletWithCleanup
-        if (typeof workletWithCleanup.cleanup === 'function') {
-          await workletWithCleanup.cleanup()
-        } else if (typeof workletWithCleanup.destroy === 'function') {
-          await workletWithCleanup.destroy()
-        } else if (typeof workletWithCleanup.stop === 'function') {
-          await workletWithCleanup.stop()
-        }
-      }
+      // Cleanup worklet - try cleanup, destroy, or stop in that order
+      await this.cleanupResource(worklet, ['cleanup', 'destroy', 'stop'])
     } catch (error) {
       logWarn('Error cleaning up worklet resources:', error)
       // Continue even if cleanup fails
@@ -159,20 +167,18 @@ export class WorkletLifecycleService {
         error: null,
       })
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'WorkletLifecycleService',
-        operation: 'startWorklet'
-      })
-      logError('[WorkletLifecycleService] Failed to start worklet:', normalizedError)
-      store.setState({
-        error: normalizedError.message,
-        isLoading: false,
-        worklet: null,
-        hrpc: null,
-        ipc: null,
-        isWorkletStarted: false,
-      })
-      throw normalizedError
+      this.handleErrorWithStateUpdate(
+        error,
+        'startWorklet',
+        (normalizedError) => ({
+          error: normalizedError.message,
+          isLoading: false,
+          worklet: null,
+          hrpc: null,
+          ipc: null,
+          isWorkletStarted: false,
+        })
+      )
     }
   }
 
@@ -185,7 +191,7 @@ export class WorkletLifecycleService {
     const store = getWorkletStore()
     const state = store.getState()
     
-    if (!state.isWorkletStarted || !state.hrpc) {
+    if (!state.isWorkletStarted) {
       throw new Error('Worklet must be started before initializing WDK')
     }
 
@@ -204,12 +210,8 @@ export class WorkletLifecycleService {
         isLoading: true,
       })
 
+      const extendedHrpc = requireExtendedHRPC()
       const currentState = store.getState()
-      if (!currentState.hrpc) {
-        throw new Error('HRPC instance not available')
-      }
-
-      const extendedHrpc = asExtendedHRPC(currentState.hrpc)
       const result = await extendedHrpc.initializeWDK({
         encryptionKey: options.encryptionKey,
         encryptedSeed: options.encryptedSeed,
@@ -217,11 +219,8 @@ export class WorkletLifecycleService {
       })
 
       // NEVER store seed phrase
-      // Extract status from result (inline type check since only used once)
-      const wdkInitResult: { status?: string | null } | null = 
-        (result !== null && typeof result === 'object' && 'status' in result)
-          ? { status: (result as { status?: string | null }).status }
-          : null
+      // Extract status from result
+      const wdkInitResult = this.extractWdkInitResult(result)
 
       store.setState({
         isInitialized: true,
@@ -231,20 +230,16 @@ export class WorkletLifecycleService {
         wdkInitResult,
         error: null,
       })
-
-      
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'WorkletLifecycleService',
-        operation: 'initializeWDK'
-      })
-      logError('[WorkletLifecycleService] Failed to initialize WDK:', normalizedError)
-      store.setState({
-        error: normalizedError.message,
-        isLoading: false,
-        isInitialized: false,
-      })
-      throw normalizedError
+      this.handleErrorWithStateUpdate(
+        error,
+        'initializeWDK',
+        (normalizedError) => ({
+          error: normalizedError.message,
+          isLoading: false,
+          isInitialized: false,
+        })
+      )
     }
   }
 
@@ -261,12 +256,12 @@ export class WorkletLifecycleService {
     const store = getWorkletStore()
     const state = store.getState()
     
-    if (!state.isWorkletStarted || !state.hrpc) {
+    if (!state.isWorkletStarted) {
       throw new Error('Worklet must be started before generating entropy')
     }
 
     try {
-      const extendedHrpc = asExtendedHRPC(state.hrpc)
+      const extendedHrpc = requireExtendedHRPC()
       const result = await extendedHrpc.generateEntropyAndEncrypt({
         wordCount,
       })
@@ -277,12 +272,7 @@ export class WorkletLifecycleService {
         encryptedEntropyBuffer: result.encryptedEntropyBuffer,
       }
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'WorkletLifecycleService',
-        operation: 'generateEntropyAndEncrypt'
-      })
-      logError('[WorkletLifecycleService] Failed to generate entropy and encrypt:', normalizedError)
-      throw new Error(`Failed to generate entropy: ${normalizedError.message}`)
+      this.handleAndThrowError(error, 'generateEntropyAndEncrypt', 'Failed to generate entropy')
     }
   }
 
@@ -298,12 +288,12 @@ export class WorkletLifecycleService {
     const store = getWorkletStore()
     const state = store.getState()
     
-    if (!state.isWorkletStarted || !state.hrpc) {
+    if (!state.isWorkletStarted) {
       throw new Error('Worklet must be started before getting mnemonic')
     }
 
     try {
-      const extendedHrpc = asExtendedHRPC(state.hrpc)
+      const extendedHrpc = requireExtendedHRPC()
       
       const result = await extendedHrpc.getMnemonicFromEntropy({
         encryptedEntropy,
@@ -314,12 +304,7 @@ export class WorkletLifecycleService {
         mnemonic: result.mnemonic,
       }
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'WorkletLifecycleService',
-        operation: 'getMnemonicFromEntropy'
-      })
-      logError('[WorkletLifecycleService] Failed to get mnemonic from entropy:', normalizedError)
-      throw new Error(`Failed to get mnemonic: ${normalizedError.message}`)
+      this.handleAndThrowError(error, 'getMnemonicFromEntropy', 'Failed to get mnemonic')
     }
   }
 
@@ -336,12 +321,12 @@ export class WorkletLifecycleService {
     const store = getWorkletStore()
     const state = store.getState()
     
-    if (!state.isWorkletStarted || !state.hrpc) {
+    if (!state.isWorkletStarted) {
       throw new Error('Worklet must be started before getting seed and entropy from mnemonic')
     }
 
     try {
-      const extendedHrpc = asExtendedHRPC(state.hrpc)
+      const extendedHrpc = requireExtendedHRPC()
       const result = await extendedHrpc.getSeedAndEntropyFromMnemonic({
         mnemonic,
       })
@@ -352,12 +337,11 @@ export class WorkletLifecycleService {
         encryptedEntropyBuffer: result.encryptedEntropyBuffer,
       }
     } catch (error) {
-      const normalizedError = normalizeError(error, false, {
-        component: 'WorkletLifecycleService',
-        operation: 'getSeedAndEntropyFromMnemonic'
-      })
-      logError('[WorkletLifecycleService] Failed to get seed and entropy from mnemonic:', normalizedError)
-      throw new Error(`Failed to get seed and entropy from mnemonic: ${normalizedError.message}`)
+      this.handleAndThrowError(
+        error,
+        'getSeedAndEntropyFromMnemonic',
+        'Failed to get seed and entropy from mnemonic'
+      )
     }
   }
 
@@ -380,19 +364,62 @@ export class WorkletLifecycleService {
   }
 
   /**
-   * Cleanup worklet resources
-   * Properly disposes of worklet instances and clears all state
+   * Handle error for methods that throw with a message prefix
+   * Normalizes error, logs it, and throws a new error with operation context
    */
-  static async cleanup(): Promise<void> {
+  private static handleAndThrowError(
+    error: unknown,
+    operation: string,
+    errorMessagePrefix: string
+  ): never {
+    const normalizedError = normalizeError(error, false, {
+      component: 'WorkletLifecycleService',
+      operation,
+    })
+    handleServiceError(error, 'WorkletLifecycleService', operation)
+    throw new Error(`${errorMessagePrefix}: ${normalizedError.message}`)
+  }
+
+  /**
+   * Handle error for methods that update store state
+   * Normalizes error, updates store state, and re-throws
+   */
+  private static handleErrorWithStateUpdate(
+    error: unknown,
+    operation: string,
+    stateUpdate: (normalizedError: Error) => Partial<WorkletState>
+  ): never {
+    const normalizedError = normalizeError(error, false, {
+      component: 'WorkletLifecycleService',
+      operation,
+    })
+    const store = getWorkletStore()
+    store.setState(stateUpdate(normalizedError))
+    handleServiceError(error, 'WorkletLifecycleService', operation)
+    throw normalizedError
+  }
+
+  /**
+   * Extract WDK initialization result status
+   * Safely extracts status from result object
+   */
+  private static extractWdkInitResult(result: unknown): { status?: string | null } | null {
+    if (result && typeof result === 'object' && 'status' in result) {
+      const status = (result as { status?: unknown }).status
+      if (status === null || status === undefined || typeof status === 'string') {
+        return { status: status ?? null }
+      }
+    }
+    return null
+  }
+
+  /**
+   * Reset both worklet and wallet stores
+   */
+  private static resetStores(): void {
     const workletStore = getWorkletStore()
     const walletStore = getWalletStore()
 
-    const { worklet, hrpc } = workletStore.getState()
-    
-    // Use extracted cleanup method
-    await this.cleanupWorkletResources(hrpc, worklet)
-
-    // Clear all state including sensitive data
     workletStore.setState({
       worklet: null,
       hrpc: null,
@@ -407,8 +434,6 @@ export class WorkletLifecycleService {
       workletStartResult: null,
       wdkInitResult: null,
     })
-    
-    // Reset wallet store
     walletStore.setState({
       addresses: {},
       walletLoading: {},
@@ -419,36 +444,26 @@ export class WorkletLifecycleService {
   }
 
   /**
+   * Cleanup worklet resources
+   * Properly disposes of worklet instances and clears all state
+   */
+  static async cleanup(): Promise<void> {
+    const workletStore = getWorkletStore()
+    const { worklet, hrpc } = workletStore.getState()
+    
+    // Use extracted cleanup method
+    await this.cleanupWorkletResources(hrpc, worklet)
+
+    // Clear all state including sensitive data
+    this.resetStores()
+  }
+
+  /**
    * Reset worklet state (synchronous)
    * For async cleanup, use cleanup() instead
    */
   static reset(): void {
-    const workletStore = getWorkletStore()
-    const walletStore = getWalletStore()
-
-    workletStore.setState({
-      worklet: null,
-      hrpc: null,
-      ipc: null,
-      isWorkletStarted: false,
-      isInitialized: false,
-      isLoading: false,
-      error: null,
-      encryptedSeed: null,
-      encryptionKey: null,
-      networkConfigs: null,
-      workletStartResult: null,
-      wdkInitResult: null,
-    })
-    
-    // Reset wallet store
-    walletStore.setState({
-      addresses: {},
-      walletLoading: {},
-      balances: {},
-      balanceLoading: {},
-      lastBalanceUpdate: {},
-    })
+    this.resetStores()
   }
 
   /**
@@ -464,8 +479,7 @@ export class WorkletLifecycleService {
    * Returns true if worklet is started and WDK is initialized
    */
   static isInitialized(): boolean {
-    const store = getWorkletStore()
-    return store.getState().isInitialized
+    return isWorkletInitialized()
   }
 }
 

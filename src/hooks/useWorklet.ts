@@ -1,6 +1,12 @@
-// Local imports
-import { getWorkletStore } from '../store/workletStore'
+import { useMemo } from 'react'
+
+import type { HRPC } from 'pear-wrk-wdk'
+import type { WorkletStartResponse } from 'pear-wrk-wdk/types/rpc'
+import type { Worklet } from 'react-native-bare-kit'
+
 import { WorkletLifecycleService } from '../services/workletLifecycleService'
+import { getWorkletStore } from '../store/workletStore'
+import type { NetworkConfigs } from '../types'
 import type { WorkletStore } from '../store/workletStore'
 
 /**
@@ -26,24 +32,76 @@ import type { WorkletStore } from '../store/workletStore'
  * }, [isInitialized, isLoading])
  * ```
  */
-export function useWorklet() {
+export interface UseWorkletResult {
+  // State (reactive)
+  isWorkletStarted: boolean
+  isInitialized: boolean
+  isLoading: boolean
+  error: string | null
+  hrpc: HRPC | null
+  worklet: Worklet | null
+  workletStartResult: WorkletStartResponse | null
+  wdkInitResult: { status?: string | null } | null
+  encryptedSeed: string | null
+  encryptionKey: string | null
+  networkConfigs: NetworkConfigs | null
+  // Actions
+  startWorklet: (networkConfigs: NetworkConfigs) => Promise<void>
+  initializeWDK: (options: { encryptionKey: string; encryptedSeed: string }) => Promise<void>
+  generateEntropyAndEncrypt: (wordCount?: 12 | 24) => Promise<{
+    encryptionKey: string
+    encryptedSeedBuffer: string
+    encryptedEntropyBuffer: string
+  }>
+  getMnemonicFromEntropy: (encryptedEntropy: string, encryptionKey: string) => Promise<{ mnemonic: string }>
+  getSeedAndEntropyFromMnemonic: (mnemonic: string) => Promise<{
+    encryptionKey: string
+    encryptedSeedBuffer: string
+    encryptedEntropyBuffer: string
+  }>
+  initializeWorklet: (options: {
+    encryptionKey: string
+    encryptedSeed: string
+    networkConfigs: NetworkConfigs
+  }) => Promise<void>
+  reset: () => void
+  clearError: () => void
+}
+
+export function useWorklet(): UseWorkletResult {
   const store = getWorkletStore()
 
-  // Subscribe to state changes using Zustand selectors
-  const isWorkletStarted = store((state: WorkletStore) => state.isWorkletStarted)
-  const isInitialized = store((state: WorkletStore) => state.isInitialized)
-  const isLoading = store((state: WorkletStore) => state.isLoading)
-  const error = store((state: WorkletStore) => state.error)
-  const hrpc = store((state: WorkletStore) => state.hrpc)
-  const worklet = store((state: WorkletStore) => state.worklet)
-  const workletStartResult = store((state: WorkletStore) => state.workletStartResult)
-  const wdkInitResult = store((state: WorkletStore) => state.wdkInitResult)
-  const encryptedSeed = store((state: WorkletStore) => state.encryptedSeed)
-  const encryptionKey = store((state: WorkletStore) => state.encryptionKey)
-  const networkConfigs = store((state: WorkletStore) => state.networkConfigs)
+  // Subscribe to state changes using consolidated selector to minimize re-renders
+  const workletState = store((state: WorkletStore) => ({
+    isWorkletStarted: state.isWorkletStarted,
+    isInitialized: state.isInitialized,
+    isLoading: state.isLoading,
+    error: state.error,
+    hrpc: state.hrpc,
+    worklet: state.worklet,
+    workletStartResult: state.workletStartResult,
+    wdkInitResult: state.wdkInitResult,
+    encryptedSeed: state.encryptedSeed,
+    encryptionKey: state.encryptionKey,
+    networkConfigs: state.networkConfigs,
+  }))
 
-  // Actions are provided by WorkletLifecycleService (static methods, no memoization needed)
-  const actions = {
+  // Actions are provided by WorkletLifecycleService (static methods, stable references)
+  // State values are from Zustand selectors and are already reactive
+  return {
+    // State (reactive)
+    isWorkletStarted: workletState.isWorkletStarted,
+    isInitialized: workletState.isInitialized,
+    isLoading: workletState.isLoading,
+    error: workletState.error,
+    hrpc: workletState.hrpc,
+    worklet: workletState.worklet,
+    workletStartResult: workletState.workletStartResult,
+    wdkInitResult: workletState.wdkInitResult,
+    encryptedSeed: workletState.encryptedSeed,
+    encryptionKey: workletState.encryptionKey,
+    networkConfigs: workletState.networkConfigs,
+    // Actions (static methods, stable references)
     startWorklet: WorkletLifecycleService.startWorklet,
     initializeWDK: WorkletLifecycleService.initializeWDK,
     generateEntropyAndEncrypt: WorkletLifecycleService.generateEntropyAndEncrypt,
@@ -52,23 +110,6 @@ export function useWorklet() {
     initializeWorklet: WorkletLifecycleService.initializeWorklet,
     reset: WorkletLifecycleService.reset,
     clearError: WorkletLifecycleService.clearError,
-  }
-
-  return {
-    // State (reactive)
-    isWorkletStarted,
-    isInitialized,
-    isLoading,
-    error,
-    hrpc,
-    worklet,
-    workletStartResult,
-    wdkInitResult,
-    encryptedSeed,
-    encryptionKey,
-    networkConfigs,
-    // Actions
-    ...actions,
   }
 }
 

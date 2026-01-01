@@ -66,7 +66,7 @@ export { WalletSetupService } from './services/walletSetupService'
 
 // Utility Functions
 export { validateMnemonic } from './utils/mnemonicUtils'
-export { convertBalanceToString, formatBalance } from './utils/balanceUtils'
+export { convertBalanceToString, formatBalance, convertBigIntToString } from './utils/balanceUtils'
 export { normalizeError, getErrorMessage, isErrorType, createContextualError } from './utils/errorUtils'
 
 // Result Type (for error handling patterns)

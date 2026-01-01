@@ -5,7 +5,14 @@
  * beyond TypeScript's compile-time checks.
  */
 
-import type { NetworkConfig, NetworkConfigs, TokenConfig, TokenConfigs, WalletAddresses, WalletBalances } from '../types'
+import type {
+  NetworkConfig,
+  NetworkConfigs,
+  TokenConfig,
+  TokenConfigs,
+  WalletAddresses,
+  WalletBalances,
+} from '../types'
 
 /**
  * Type guard to check if a value is a valid NetworkConfig

@@ -12,16 +12,17 @@
  */
 
 import React, { createContext, useEffect, useMemo } from 'react'
+
 import { createSecureStorage } from '@tetherto/wdk-rn-secure-storage'
-import type { NetworkConfigs, TokenConfigs } from '../types'
-import { useWdkInitialization } from '../hooks/useWdkInitialization'
+
 import { useWdkBalanceSync } from '../hooks/useWdkBalanceSync'
-import { useAbortController } from '../hooks/useAbortController'
+import { useWdkInitialization } from '../hooks/useWdkInitialization'
 import { WalletSetupService } from '../services/walletSetupService'
-import { validateNetworkConfigs, validateTokenConfigs, validateBalanceRefreshInterval } from '../utils/validation'
-import { normalizeError } from '../utils/errorUtils'
 import { DEFAULT_BALANCE_REFRESH_INTERVAL_MS } from '../utils/constants'
+import { normalizeError } from '../utils/errorUtils'
 import { logError } from '../utils/logger'
+import { validateBalanceRefreshInterval, validateNetworkConfigs, validateTokenConfigs } from '../utils/validation'
+import type { NetworkConfigs, TokenConfigs } from '../types'
 
 
 /**
@@ -103,9 +104,6 @@ export function WdkAppProvider({
     }
   }, [networkConfigs, tokenConfigs, balanceRefreshInterval])
 
-  // AbortController hook for managing async operation cancellation
-  const { getController } = useAbortController()
-
   // WDK initialization hook - handles worklet startup, wallet checking, and initialization
   const {
     walletExists,
@@ -117,39 +115,16 @@ export function WdkAppProvider({
   } = useWdkInitialization(
     secureStorage,
     networkConfigs,
-    getController(),
     identifier,
     enabled
   )
 
   // Calculate readiness state
   const isReady = useMemo(() => {
-    // If worklet isn't started, not ready
-    if (!isWorkletStarted) {
-      return false
-    }
-
-    // If wallet initialization is disabled, ready once worklet is started
-    if (!enabled) {
-      return true
-    }
-
-    // If there's an error, not ready (user needs to retry)
-    if (initializationError) {
-      return false
-    }
-
-    // If wallet is initializing, not ready
-    if (isInitializingFromHook) {
-      return false
-    }
-
-    // If wallet should exist but isn't initialized yet, not ready
-    if (walletExists && !walletInitialized) {
-      return false
-    }
-
-    // All conditions met, ready
+    if (!isWorkletStarted) return false
+    if (!enabled) return true
+    if (initializationError || isInitializingFromHook) return false
+    if (walletExists && !walletInitialized) return false
     return true
   }, [
     isWorkletStarted,
