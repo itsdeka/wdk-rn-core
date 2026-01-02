@@ -20,6 +20,8 @@ describe('useWdkApp', () => {
       walletExists: true,
       error: null,
       retry: jest.fn(),
+      loadExisting: jest.fn().mockResolvedValue(undefined),
+      createNew: jest.fn().mockResolvedValue(undefined),
       isFetchingBalances: false,
       refreshBalances: jest.fn(),
     }

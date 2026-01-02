@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 
 import type { HRPC } from 'pear-wrk-wdk'
 import type { WorkletStartResponse } from 'pear-wrk-wdk/types/rpc'
@@ -72,7 +72,9 @@ export function useWorklet(): UseWorkletResult {
   const store = getWorkletStore()
 
   // Subscribe to state changes using consolidated selector to minimize re-renders
-  const workletState = store((state: WorkletStore) => ({
+  // Use useShallow to prevent infinite loops when selector returns new object
+  // useShallow is a hook and must be called at the top level (not inside useMemo)
+  const selector = useShallow((state: WorkletStore) => ({
     isWorkletStarted: state.isWorkletStarted,
     isInitialized: state.isInitialized,
     isLoading: state.isLoading,
@@ -85,6 +87,7 @@ export function useWorklet(): UseWorkletResult {
     encryptionKey: state.encryptionKey,
     networkConfigs: state.networkConfigs,
   }))
+  const workletState = store(selector)
 
   // Actions are provided by WorkletLifecycleService (static methods, stable references)
   // State values are from Zustand selectors and are already reactive

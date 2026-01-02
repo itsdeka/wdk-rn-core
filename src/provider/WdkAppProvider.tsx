@@ -39,6 +39,10 @@ export interface WdkAppContextValue {
   error: Error | null
   /** Retry initialization after an error */
   retry: () => void
+  /** Load existing wallet from storage (only if wallet exists, throws error if it doesn't) */
+  loadExisting: () => Promise<void>
+  /** Create and initialize a new wallet */
+  createNew: () => Promise<void>
   /** Balance fetching is in progress */
   isFetchingBalances: boolean
   /** Refresh all balances manually */
@@ -61,8 +65,6 @@ export interface WdkAppProviderProps {
   balanceRefreshInterval?: number
   /** Optional identifier for multi-wallet support (e.g., user email, user ID) */
   identifier?: string
-  /** Whether wallet initialization is enabled. When false, skips wallet checking and initialization but still starts worklet. Defaults to true. */
-  enabled?: boolean
   /** Child components (app content) */
   children: React.ReactNode
 }
@@ -79,7 +81,6 @@ export function WdkAppProvider({
   autoFetchBalances = true,
   balanceRefreshInterval = DEFAULT_BALANCE_REFRESH_INTERVAL_MS,
   identifier,
-  enabled = true,
   children,
 }: WdkAppProviderProps) {
   // Create secureStorage singleton
@@ -104,31 +105,30 @@ export function WdkAppProvider({
     }
   }, [networkConfigs, tokenConfigs, balanceRefreshInterval])
 
-  // WDK initialization hook - handles worklet startup, wallet checking, and initialization
+  // WDK initialization hook - handles worklet startup, wallet checking (but not automatic initialization)
   const {
     walletExists,
     isInitializing: isInitializingFromHook,
     error: initializationError,
     retry,
+    loadExisting,
+    createNew,
     isWorkletStarted,
     walletInitialized,
   } = useWdkInitialization(
     secureStorage,
     networkConfigs,
-    identifier,
-    enabled
+    identifier
   )
 
   // Calculate readiness state
   const isReady = useMemo(() => {
     if (!isWorkletStarted) return false
-    if (!enabled) return true
     if (initializationError || isInitializingFromHook) return false
     if (walletExists && !walletInitialized) return false
     return true
   }, [
     isWorkletStarted,
-    enabled,
     initializationError,
     isInitializingFromHook,
     walletExists,
@@ -154,10 +154,12 @@ export function WdkAppProvider({
       walletExists,
       error: initializationError,
       retry,
+      loadExisting,
+      createNew,
       isFetchingBalances,
       refreshBalances,
     }),
-    [isReady, isInitializingFromHook, walletExists, initializationError, retry, isFetchingBalances, refreshBalances]
+    [isReady, isInitializingFromHook, walletExists, initializationError, retry, loadExisting, createNew, isFetchingBalances, refreshBalances]
   )
 
   return (

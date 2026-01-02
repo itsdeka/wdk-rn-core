@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getWalletStore } from '../store/walletStore'
 import { getWorkletStore } from '../store/workletStore'
+import { isInitialized } from '../utils/storeHelpers'
 import { log, logError } from '../utils/logger'
 import { useBalanceFetcher } from './useBalanceFetcher'
 import { useMutex } from './useMutex'
@@ -40,8 +41,12 @@ export function useWdkBalanceSync(
   })
 
   const refreshBalances = useCallback(async (): Promise<void> => {
-    if (!walletInitialized) {
-      log('[useWdkBalanceSync] Cannot refresh balances: wallet not ready')
+    // Check both wallet and worklet initialization before fetching
+    if (!walletInitialized || !isInitialized()) {
+      log('[useWdkBalanceSync] Cannot refresh balances: wallet or worklet not ready', {
+        walletInitialized,
+        workletInitialized: isInitialized(),
+      })
       return
     }
 
@@ -61,7 +66,9 @@ export function useWdkBalanceSync(
 
   // Automatic balance fetching after wallet initialization
   useEffect(() => {
-    const shouldFetchBalances = autoFetchBalances && walletInitialized && isReady && !hasCompletedInitialBalanceFetch.current
+    // Check both wallet and worklet initialization before fetching
+    const workletReady = isInitialized()
+    const shouldFetchBalances = autoFetchBalances && walletInitialized && isReady && workletReady && !hasCompletedInitialBalanceFetch.current
     if (!shouldFetchBalances) {
       return
     }

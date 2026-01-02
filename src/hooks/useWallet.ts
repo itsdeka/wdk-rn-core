@@ -1,3 +1,6 @@
+import { useCallback } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+
 import { AccountService } from '../services/accountService'
 import { AddressService } from '../services/addressService'
 import { BalanceService } from '../services/balanceService'
@@ -73,13 +76,16 @@ export function useWallet(): UseWalletResult {
   const walletStore = getWalletStore()
 
   // Subscribe to state changes using consolidated selectors to minimize re-renders
-  const walletState = walletStore((state: WalletStore) => ({
+  // Use useShallow to prevent infinite loops when selector returns new object
+  // useShallow is a hook and must be called at the top level (not inside useMemo)
+  const walletSelector = useShallow((state: WalletStore) => ({
     addresses: state.addresses,
     walletLoading: state.walletLoading,
     balances: state.balances,
     balanceLoading: state.balanceLoading,
     lastBalanceUpdate: state.lastBalanceUpdate,
   }))
+  const walletState = walletStore(walletSelector)
   const isInitialized = workletStore((state: WorkletStore) => state.isInitialized)
 
   // Get all addresses for a specific network
@@ -93,19 +99,21 @@ export function useWallet(): UseWalletResult {
   }
 
   // Get a specific address (from cache or fetch)
-  const getAddress = async (network: string, accountIndex: number = 0) => {
+  // Wrapped in useCallback to ensure stable function reference across renders
+  const getAddress = useCallback(async (network: string, accountIndex: number = 0) => {
     return AddressService.getAddress(network, accountIndex)
-  }
+  }, [])
 
   // Call a method on a wallet account
-  const callAccountMethod = async <T = unknown>(
+  // Wrapped in useCallback to ensure stable function reference across renders
+  const callAccountMethod = useCallback(async <T = unknown>(
     network: string,
     accountIndex: number,
     methodName: string,
     args?: unknown
   ): Promise<T> => {
     return AccountService.callAccountMethod<T>(network, accountIndex, methodName, args)
-  }
+  }, [])
 
   // Balance management methods - direct calls to static service methods
   const updateBalance = (accountIndex: number, network: string, tokenAddress: string | null, balance: string) => {
