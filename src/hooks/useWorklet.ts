@@ -73,6 +73,7 @@ export function useWorklet(): UseWorkletResult {
 
   // Subscribe to state changes using consolidated selector to minimize re-renders
   // Use useShallow to prevent infinite loops when selector returns new object
+  // useShallow is a hook and must be called at the top level (not inside useMemo)
   const selector = useShallow((state: WorkletStore) => ({
     isWorkletStarted: state.isWorkletStarted,
     isInitialized: state.isInitialized,

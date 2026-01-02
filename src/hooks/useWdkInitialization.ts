@@ -29,6 +29,10 @@ export interface UseWdkInitializationResult {
   error: Error | null
   /** Retry initialization after an error */
   retry: () => void
+  /** Load existing wallet from storage (only if wallet exists, throws error if it doesn't) */
+  loadExisting: () => Promise<void>
+  /** Create and initialize a new wallet */
+  createNew: () => Promise<void>
   /** Whether worklet is started */
   isWorkletStarted: boolean
   /** Whether wallet is initialized */
@@ -39,6 +43,7 @@ type InitState =
   | { type: 'idle' }
   | { type: 'starting_worklet' }
   | { type: 'checking_wallet' }
+  | { type: 'wallet_checked'; walletExists: boolean }
   | { type: 'initializing_wallet'; walletExists: boolean }
   | { type: 'ready' }
   | { type: 'error'; error: Error; isAuthError: boolean }
@@ -78,10 +83,10 @@ function initReducer(state: InitState, action: InitAction): InitState {
         : state
 
     case 'WALLET_CHECKED':
-      return { type: 'initializing_wallet', walletExists: action.exists }
+      return { type: 'wallet_checked', walletExists: action.exists }
 
     case 'WALLET_CHECK_ERROR':
-      return { type: 'initializing_wallet', walletExists: false }
+      return { type: 'wallet_checked', walletExists: false }
 
     case 'INITIALIZE_WALLET':
       return { type: 'initializing_wallet', walletExists: action.walletExists }
@@ -111,6 +116,8 @@ function getStateContext(state: InitState): InitStateContext {
   switch (state.type) {
     case 'checking_wallet':
       return { walletExists: null, error: null }
+    case 'wallet_checked':
+      return { walletExists: state.walletExists, error: null }
     case 'initializing_wallet':
       return { walletExists: state.walletExists, error: null }
     case 'error':
@@ -125,12 +132,12 @@ function getStateContext(state: InitState): InitStateContext {
 export function useWdkInitialization(
   secureStorage: SecureStorage,
   networkConfigs: NetworkConfigs,
-  identifier?: string,
-  enabled: boolean = true
+  identifier?: string
 ): UseWdkInitializationResult {
   const [state, dispatch] = useReducer(initReducer, { type: 'idle' })
   const cancelledRef = useRef(false)
-  const prevEnabledRef = useRef(enabled)
+  const lastAuthErrorRef = useRef<number | null>(null)
+  const AUTH_ERROR_COOLDOWN_MS = 3000 // 3 seconds
 
   const {
     isWorkletStarted,
@@ -149,36 +156,38 @@ export function useWdkInitialization(
 
   const stateContext = getStateContext(state)
 
-  // Reset state when enabled changes from false to true
-  useEffect(() => {
-    if (enabled && !prevEnabledRef.current) {
-      log('[useWdkInitialization] Enabled changed to true, resetting state')
-      dispatch({ type: 'RESET' })
-      cancelledRef.current = false
-    }
-    prevEnabledRef.current = enabled
-  }, [enabled])
-
   // Initialize worklet when component mounts or when reset
   useEffect(() => {
     log('[useWdkInitialization] Checking initialization conditions', {
       stateType: state.type,
       isWorkletInitialized,
       isWorkletLoading,
-      enabled,
+      isWorkletStarted,
     })
     
-    if (
-      state.type !== 'idle' ||
-      isWorkletInitialized ||
-      isWorkletLoading ||
-      !enabled
-    ) {
+    // Skip if worklet is loading
+    if (isWorkletLoading) {
       log('[useWdkInitialization] Initialization skipped', {
-        reason: state.type !== 'idle' ? 'state not idle' :
-                isWorkletInitialized ? 'already initialized' :
-                isWorkletLoading ? 'already loading' :
-                !enabled ? 'not enabled' : 'unknown'
+        reason: 'already loading'
+      })
+      return
+    }
+
+    // If worklet is already started/initialized, proceed to wallet check
+    // This handles the case where worklet was started but state machine is stuck
+    // Exclude error state to prevent automatic retry loop
+    if (isWorkletStarted || isWorkletInitialized) {
+      if (state.type !== 'checking_wallet' && state.type !== 'wallet_checked' && state.type !== 'initializing_wallet' && state.type !== 'ready' && state.type !== 'error') {
+        log('[useWdkInitialization] Worklet already started, proceeding to wallet check')
+        dispatch({ type: 'WORKLET_STARTED' })
+      }
+      return
+    }
+
+    // Only start worklet if state is idle (not already starting)
+    if (state.type !== 'idle') {
+      log('[useWdkInitialization] Initialization skipped - state not idle', {
+        stateType: state.type
       })
       return
     }
@@ -211,14 +220,13 @@ export function useWdkInitialization(
     return () => {
       cancelledRef.current = true
     }
-  }, [state.type, isWorkletInitialized, isWorkletLoading, enabled, networkConfigs, startWorklet])
+  }, [state.type, isWorkletInitialized, isWorkletLoading, networkConfigs, startWorklet])
 
   // Check wallet existence when worklet is started
   useEffect(() => {
     if (
       state.type !== 'checking_wallet' ||
-      !isWorkletStarted ||
-      !enabled
+      !isWorkletStarted
     ) {
       return
     }
@@ -245,54 +253,116 @@ export function useWdkInitialization(
     return () => {
       cancelledRef.current = true
     }
-  }, [state.type, isWorkletStarted, hasWallet, identifier, enabled])
+  }, [state.type, isWorkletStarted, hasWallet, identifier])
 
-  // Initialize wallet when wallet check is complete
-  useEffect(() => {
-    if (
-      state.type !== 'initializing_wallet' ||
-      walletInitialized ||
-      !enabled
-    ) {
+
+  // Helper to check prerequisites and handle cooldown
+  const checkPrerequisites = useCallback(async (): Promise<void> => {
+    if (!isWorkletStarted) {
+      throw new Error('Worklet must be started before initializing wallet')
+    }
+
+    if (walletInitialized) {
+      log('[useWdkInitialization] Wallet already initialized')
       return
     }
 
-    cancelledRef.current = false
-
-    const performInitialization = async () => {
-      try {
-        log('[useWdkInitialization] Starting wallet initialization...')
-        const walletExists = state.walletExists
-
-        if (walletExists) {
-          log('[useWdkInitialization] Loading existing wallet from secure storage...')
-          await initializeWallet({ createNew: false, identifier })
-        } else {
-          log('[useWdkInitialization] Creating new wallet...')
-          await initializeWallet({ createNew: true, identifier })
-        }
-
-        if (cancelledRef.current) return
-        log('[useWdkInitialization] Wallet initialized successfully')
-        dispatch({ type: 'WALLET_INITIALIZED' })
-      } catch (error) {
-        if (cancelledRef.current) return
-
-        const err = normalizeError(error, true, {
-          component: 'useWdkInitialization',
-          operation: 'walletInitialization',
-        })
-        logError('[useWdkInitialization] Failed to initialize wallet:', error)
-        dispatch({ type: 'WALLET_INIT_ERROR', error: err })
+    // Check cooldown period for authentication errors
+    if (lastAuthErrorRef.current !== null) {
+      const timeSinceError = Date.now() - lastAuthErrorRef.current
+      if (timeSinceError < AUTH_ERROR_COOLDOWN_MS) {
+        throw new Error(`Skipping initialization - cooldown period active (${AUTH_ERROR_COOLDOWN_MS - timeSinceError}ms remaining)`)
       }
     }
 
-    performInitialization()
-
-    return () => {
-      cancelledRef.current = true
+    // Ensure wallet check has completed
+    if (stateContext.walletExists === null) {
+      log('[useWdkInitialization] Wallet check not complete, checking now...')
+      try {
+        const walletExistsResult = await hasWallet(identifier)
+        dispatch({ type: 'WALLET_CHECKED', exists: walletExistsResult })
+      } catch (error) {
+        logError('[useWdkInitialization] Failed to check wallet:', error)
+        dispatch({ type: 'WALLET_CHECK_ERROR' })
+        throw error
+      }
     }
-  }, [state, walletInitialized, initializeWallet, identifier, enabled])
+  }, [
+    isWorkletStarted,
+    walletInitialized,
+    stateContext.walletExists,
+    hasWallet,
+    identifier,
+  ])
+
+  // Load existing wallet from storage (only if wallet exists)
+  const loadExisting = useCallback(async (): Promise<void> => {
+    await checkPrerequisites()
+
+    // Check if wallet exists
+    const walletExists = stateContext.walletExists ?? false
+    if (!walletExists) {
+      throw new Error('Cannot load existing wallet - wallet does not exist')
+    }
+
+    dispatch({ type: 'INITIALIZE_WALLET', walletExists })
+
+    try {
+          log('[useWdkInitialization] Loading existing wallet from secure storage...')
+          await initializeWallet({ createNew: false, identifier })
+      log('[useWdkInitialization] Wallet loaded successfully')
+        dispatch({ type: 'WALLET_INITIALIZED' })
+      } catch (error) {
+        const err = normalizeError(error, true, {
+          component: 'useWdkInitialization',
+        operation: 'loadExisting',
+        })
+      logError('[useWdkInitialization] Failed to load existing wallet:', error)
+        
+        if (isAuthenticationError(err)) {
+          lastAuthErrorRef.current = Date.now()
+        }
+        
+        dispatch({ type: 'WALLET_INIT_ERROR', error: err })
+      throw err
+      }
+  }, [
+    checkPrerequisites,
+    stateContext.walletExists,
+    initializeWallet,
+    identifier,
+  ])
+
+  // Create and initialize a new wallet
+  const createNew = useCallback(async (): Promise<void> => {
+    await checkPrerequisites()
+
+    dispatch({ type: 'INITIALIZE_WALLET', walletExists: false })
+
+    try {
+      log('[useWdkInitialization] Creating new wallet...')
+      await initializeWallet({ createNew: true, identifier })
+      log('[useWdkInitialization] New wallet created and initialized successfully')
+      dispatch({ type: 'WALLET_INITIALIZED' })
+    } catch (error) {
+      const err = normalizeError(error, true, {
+        component: 'useWdkInitialization',
+        operation: 'createNew',
+      })
+      logError('[useWdkInitialization] Failed to create new wallet:', error)
+      
+      if (isAuthenticationError(err)) {
+        lastAuthErrorRef.current = Date.now()
+      }
+      
+      dispatch({ type: 'WALLET_INIT_ERROR', error: err })
+      throw err
+    }
+  }, [
+    checkPrerequisites,
+    initializeWallet,
+    identifier,
+  ])
 
   // Update state when wallet becomes initialized externally
   useEffect(() => {
@@ -303,6 +373,8 @@ export function useWdkInitialization(
 
   const retry = useCallback(async () => {
     log('[useWdkInitialization] Retrying initialization...')
+    // Reset cooldown timer to allow explicit retry
+    lastAuthErrorRef.current = null
     dispatch({ type: 'RETRY' })
     cancelledRef.current = false
 
@@ -325,15 +397,13 @@ export function useWdkInitialization(
 
   // Calculate isInitializing based on state
   const isInitializing = useMemo(() => {
-    if (!enabled) return false
     if (isWorkletLoading || isWalletInitializing) return true
 
     const inProgressStates = ['starting_worklet', 'checking_wallet', 'initializing_wallet'] as const
     if (inProgressStates.includes(state.type as typeof inProgressStates[number])) return true
 
-    return !stateContext.walletExists && isWorkletStarted && state.type === 'idle'
+    return false
   }, [
-    enabled,
     state.type,
     stateContext.walletExists,
     isWorkletStarted,
@@ -346,6 +416,8 @@ export function useWdkInitialization(
     isInitializing,
     error: stateContext.error,
     retry,
+    loadExisting,
+    createNew,
     isWorkletStarted,
     walletInitialized,
   }

@@ -15,7 +15,7 @@ import { DEFAULT_MNEMONIC_WORD_COUNT } from '../utils/constants'
 import { handleServiceError } from '../utils/errorHandling'
 import { normalizeError } from '../utils/errorUtils'
 import { log, logError, logWarn } from '../utils/logger'
-import { isInitialized as isWorkletInitialized, requireExtendedHRPC } from '../utils/storeHelpers'
+import { isInitialized as isWorkletInitialized } from '../utils/storeHelpers'
 import type { NetworkConfigs } from '../types'
 import type { WorkletState } from '../store/workletStore'
 
@@ -210,8 +210,13 @@ export class WorkletLifecycleService {
         isLoading: true,
       })
 
-      const extendedHrpc = requireExtendedHRPC()
+      // Get HRPC directly from store instead of using requireExtendedHRPC()
+      // requireExtendedHRPC() requires isInitialized to be true, but we're setting it here
       const currentState = store.getState()
+      if (!currentState.hrpc) {
+        throw new Error('HRPC instance not available. Worklet may not be fully started.')
+      }
+      const extendedHrpc = asExtendedHRPC(currentState.hrpc)
       const result = await extendedHrpc.initializeWDK({
         encryptionKey: options.encryptionKey,
         encryptedSeed: options.encryptedSeed,
@@ -261,7 +266,13 @@ export class WorkletLifecycleService {
     }
 
     try {
-      const extendedHrpc = requireExtendedHRPC()
+      // Get HRPC directly from store instead of using requireExtendedHRPC()
+      // These methods may be called before WDK is initialized
+      const currentState = store.getState()
+      if (!currentState.hrpc) {
+        throw new Error('HRPC instance not available. Worklet may not be fully started.')
+      }
+      const extendedHrpc = asExtendedHRPC(currentState.hrpc)
       const result = await extendedHrpc.generateEntropyAndEncrypt({
         wordCount,
       })
@@ -293,7 +304,13 @@ export class WorkletLifecycleService {
     }
 
     try {
-      const extendedHrpc = requireExtendedHRPC()
+      // Get HRPC directly from store instead of using requireExtendedHRPC()
+      // These methods may be called before WDK is initialized
+      const currentState = store.getState()
+      if (!currentState.hrpc) {
+        throw new Error('HRPC instance not available. Worklet may not be fully started.')
+      }
+      const extendedHrpc = asExtendedHRPC(currentState.hrpc)
       
       const result = await extendedHrpc.getMnemonicFromEntropy({
         encryptedEntropy,
@@ -326,7 +343,13 @@ export class WorkletLifecycleService {
     }
 
     try {
-      const extendedHrpc = requireExtendedHRPC()
+      // Get HRPC directly from store instead of using requireExtendedHRPC()
+      // These methods may be called before WDK is initialized
+      const currentState = store.getState()
+      if (!currentState.hrpc) {
+        throw new Error('HRPC instance not available. Worklet may not be fully started.')
+      }
+      const extendedHrpc = asExtendedHRPC(currentState.hrpc)
       const result = await extendedHrpc.getSeedAndEntropyFromMnemonic({
         mnemonic,
       })
